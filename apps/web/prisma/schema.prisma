@@ -19,8 +19,9 @@ model Account {
   providerAccountId String
   refresh_token     String?       @db.Text
   access_token      String?       @db.Text
-  expires_at        DateTime?     @default(now())
-  token_type        String?
+  expires_at                  DateTime?     @default(now())
+  refresh_token_expires_at    DateTime?
+  token_type                  String?
   scope             String?
   id_token          String?       @db.Text
   session_state     String?

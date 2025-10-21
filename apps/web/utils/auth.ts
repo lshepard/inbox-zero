@@ -83,6 +83,7 @@ export const betterAuthConfig = betterAuth({
       refreshToken: "refresh_token",
       accessToken: "access_token",
       accessTokenExpiresAt: "expires_at",
+      refreshTokenExpiresAt: "refresh_token_expires_at",
       idToken: "id_token",
     },
   },
