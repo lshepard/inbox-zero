@@ -59,46 +59,26 @@ const actionSchema = (provider: string) =>
       ),
     fields: z
       .object({
-        label: z
-          .string()
-          .nullish()
-          .transform((v) => v ?? null)
-          .describe("The label to apply to the email"),
+        label: z.string().nullish().describe("The label to apply to the email"),
         to: z
           .string()
           .nullish()
-          .transform((v) => v ?? null)
           .describe("The to email address to send the email to"),
         cc: z
           .string()
           .nullish()
-          .transform((v) => v ?? null)
           .describe("The cc email address to send the email to"),
         bcc: z
           .string()
           .nullish()
-          .transform((v) => v ?? null)
           .describe("The bcc email address to send the email to"),
-        subject: z
-          .string()
-          .nullish()
-          .transform((v) => v ?? null)
-          .describe("The subject of the email"),
-        content: z
-          .string()
-          .nullish()
-          .transform((v) => v ?? null)
-          .describe("The content of the email"),
-        webhookUrl: z
-          .string()
-          .nullish()
-          .transform((v) => v ?? null)
-          .describe("The webhook URL to call"),
+        subject: z.string().nullish().describe("The subject of the email"),
+        content: z.string().nullish().describe("The content of the email"),
+        webhookUrl: z.string().nullish().describe("The webhook URL to call"),
         ...(isMicrosoftProvider(provider) && {
           folderName: z
             .string()
             .nullish()
-            .transform((v) => v ?? null)
             .describe("The folder to move the email to"),
         }),
       })
