@@ -1,6 +1,11 @@
 import { PlusIcon } from "lucide-react";
 import { RulesPrompt } from "@/app/(app)/[emailAccountId]/assistant/RulesPromptNew";
-import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 
 export function AddRuleDialog() {
@@ -12,6 +17,7 @@ export function AddRuleDialog() {
         </Button>
       </DialogTrigger>
       <DialogContent className="max-w-5xl">
+        <DialogTitle>Add Rule</DialogTitle>
         <RulesPrompt />
       </DialogContent>
     </Dialog>
