@@ -24,6 +24,7 @@ import {
 import { useAccount } from "@/providers/EmailAccountProvider";
 import { prefixPath } from "@/utils/path";
 import { fetchWithAccount } from "@/utils/fetch";
+import { Checkbox } from "@/components/ui/checkbox";
 
 export function BulkRunRules() {
   const { emailAccountId } = useAccount();
@@ -41,6 +42,7 @@ export function BulkRunRules() {
 
   const [startDate, setStartDate] = useState<Date | undefined>();
   const [endDate, setEndDate] = useState<Date | undefined>();
+  const [includeProcessed, setIncludeProcessed] = useState(false);
 
   const abortRef = useRef<() => void>(undefined);
 
@@ -61,7 +63,10 @@ export function BulkRunRules() {
               <>
                 <SectionDescription>
                   This runs your rules on unread emails currently in your inbox
-                  (that have not been previously processed).
+                  {includeProcessed
+                    ? ""
+                    : " (that have not been previously processed)"}
+                  .
                 </SectionDescription>
 
                 {!!queue.size && (
@@ -91,6 +96,29 @@ export function BulkRunRules() {
                           />
                         </div>
 
+                        <div className="flex items-center space-x-2">
+                          <Checkbox
+                            id="include-processed"
+                            checked={includeProcessed}
+                            onCheckedChange={(checked) =>
+                              setIncludeProcessed(!!checked)
+                            }
+                            disabled={running}
+                          />
+                          <label
+                            htmlFor="include-processed"
+                            className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                          >
+                            Rerun on Emails Previously Processed
+                          </label>
+                        </div>
+                        {includeProcessed && (
+                          <SectionDescription className="text-xs text-muted-foreground mt-0">
+                            This will re-process emails that have already been
+                            processed, allowing you to apply updated rules.
+                          </SectionDescription>
+                        )}
+
                         <Button
                           type="button"
                           disabled={running || !startDate}
@@ -100,7 +128,7 @@ export function BulkRunRules() {
                             setRunning(true);
                             abortRef.current = await onRun(
                               emailAccountId,
-                              { startDate, endDate },
+                              { startDate, endDate, includeProcessed },
                               (count) =>
                                 setTotalThreads((total) => total + count),
                               () => setRunning(false),
@@ -147,7 +175,11 @@ export function BulkRunRules() {
 // fetch batches of messages and add them to the ai queue
 async function onRun(
   emailAccountId: string,
-  { startDate, endDate }: { startDate: Date; endDate?: Date },
+  {
+    startDate,
+    endDate,
+    includeProcessed,
+  }: { startDate: Date; endDate?: Date; includeProcessed?: boolean },
   incrementThreadsQueued: (count: number) => void,
   onComplete: () => void,
 ) {
@@ -181,17 +213,19 @@ async function onRun(
 
       nextPageToken = data.nextPageToken || "";
 
-      const threadsWithoutPlan = data.threads.filter((t) => !t.plan);
+      const threadsToProcess = includeProcessed
+        ? data.threads
+        : data.threads.filter((t) => !t.plan);
 
-      incrementThreadsQueued(threadsWithoutPlan.length);
+      incrementThreadsQueued(threadsToProcess.length);
 
-      runAiRules(emailAccountId, threadsWithoutPlan, false);
+      runAiRules(emailAccountId, threadsToProcess, includeProcessed || false);
 
       if (!nextPageToken || aborted) break;
 
       // avoid gmail api rate limits
       // ai takes longer anyway
-      await sleep(threadsWithoutPlan.length ? 5000 : 2000);
+      await sleep(threadsToProcess.length ? 5000 : 2000);
     }
 
     onComplete();

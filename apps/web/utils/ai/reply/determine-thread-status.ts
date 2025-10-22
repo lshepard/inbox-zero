@@ -26,6 +26,9 @@ Your task is to determine the current status of an email thread from the user's 
 - The user needs to provide specific input
 - Someone follows up on a conversation requiring the user's response
 - There are ANY unanswered questions/requests in the thread that the user hasn't addressed yet
+- TO_REPLY should only be used when the email comes from a real person - not from an automated system.
+- If an email is more than 10 days old, then assume it is likely resolved. Especially assume it's resolved if it came from an automated system. Take the extra time to search history to see if it has been resolved via a separate thread.
+- Calendar invites should never be TO_REPLY
 
 **FYI**: The user received important email(s) that don't require a response. Use this when:
 - Important updates, announcements, or information the user should be aware of

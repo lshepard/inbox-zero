@@ -1,9 +1,15 @@
 import { redirect } from "next/navigation";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { CheckCircleIcon, ClockIcon, MailIcon } from "lucide-react";
+import {
+  AlertCircleIcon,
+  CheckCircleIcon,
+  ClockIcon,
+  MailIcon,
+} from "lucide-react";
 import { NeedsReply } from "./NeedsReply";
 import { Resolved } from "./Resolved";
 import { AwaitingReply } from "./AwaitingReply";
+import { NeedsAction } from "./NeedsAction";
 import prisma from "@/utils/prisma";
 import { TimeRangeFilter } from "./TimeRangeFilter";
 import type { TimeRange } from "./date-filter";
@@ -84,13 +90,13 @@ export default async function ReplyTrackerPage(props: {
                   <ClockIcon className="h-4 w-4" />
                   Waiting
                 </TabsTrigger>
-                {/* <TabsTrigger
-                value="needsAction"
-                className="flex items-center gap-2"
-              >
-                <AlertCircleIcon className="h-4 w-4" />
-                Needs Action
-              </TabsTrigger> */}
+                <TabsTrigger
+                  value="needsAction"
+                  className="flex items-center gap-2"
+                >
+                  <AlertCircleIcon className="h-4 w-4" />
+                  Needs Action
+                </TabsTrigger>
 
                 <TabsTrigger
                   value="resolved"
@@ -128,9 +134,15 @@ export default async function ReplyTrackerPage(props: {
           />
         </TabsContent>
 
-        {/* <TabsContent value="needsAction" className="mt-0 flex-1">
-        <NeedsAction userId={userId} userEmail={userEmail} page={page} />
-      </TabsContent> */}
+        <TabsContent value="needsAction" className="mt-0 flex-1">
+          <NeedsAction
+            emailAccountId={emailAccountId}
+            userEmail={emailAccount.email}
+            page={page}
+            timeRange={timeRange}
+            isAnalyzing={isAnalyzing}
+          />
+        </TabsContent>
 
         <TabsContent value="resolved" className="mt-0 flex-1">
           <Resolved
