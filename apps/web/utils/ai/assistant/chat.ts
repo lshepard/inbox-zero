@@ -662,6 +662,171 @@ export type AddToKnowledgeBaseTool = InferUITool<
   ReturnType<typeof addToKnowledgeBaseTool>
 >;
 
+const searchHistoricalEmailsTool = ({
+  email,
+  emailAccountId,
+}: {
+  email: string;
+  emailAccountId: string;
+}) =>
+  tool({
+    name: "searchHistoricalEmails",
+    description:
+      "Search through historical emails to find patterns and examples for rule creation",
+    inputSchema: z.object({
+      query: z
+        .string()
+        .describe(
+          "Search query - can be keywords, topics, or themes (e.g., 'philanthropy', 'donations', 'giving', 'charity')",
+        ),
+      fromDomain: z
+        .string()
+        .optional()
+        .describe("Filter by sender domain (e.g., '@charity.org')"),
+      timeframe: z
+        .enum(["1week", "1month", "3months", "6months", "1year"])
+        .default("6months")
+        .describe("How far back to search"),
+      maxResults: z
+        .number()
+        .max(50)
+        .default(20)
+        .describe("Maximum number of emails to return"),
+    }),
+    execute: async ({ query, fromDomain, timeframe, maxResults }) => {
+      trackToolCall({ tool: "search_historical_emails", email });
+
+      try {
+        // Get email account and provider
+        const emailAccount = await prisma.emailAccount.findUnique({
+          where: { id: emailAccountId },
+          select: {
+            account: {
+              select: {
+                provider: true,
+              },
+            },
+          },
+        });
+
+        if (!emailAccount?.account?.provider) {
+          return {
+            error: "Email provider not found",
+            message: "Unable to determine email provider for search",
+          };
+        }
+
+        // Create email provider
+        const { createEmailProvider } = await import("@/utils/email/provider");
+        const provider = await createEmailProvider({
+          emailAccountId,
+          provider: emailAccount.account.provider,
+        });
+
+        // Calculate date range
+        const now = new Date();
+        const timeframeMap = {
+          "1week": 7,
+          "1month": 30,
+          "3months": 90,
+          "6months": 180,
+          "1year": 365,
+        };
+        const daysBack = timeframeMap[timeframe];
+        const startDate = new Date(
+          now.getTime() - daysBack * 24 * 60 * 60 * 1000,
+        );
+
+        // Build Gmail/Outlook search query
+        let searchQuery = query;
+        if (fromDomain) {
+          const domain = fromDomain.startsWith("@")
+            ? fromDomain.slice(1)
+            : fromDomain;
+          searchQuery += ` from:${domain}`;
+        }
+
+        logger.info("Searching historical emails", {
+          searchQuery,
+          timeframe,
+          maxResults,
+          startDate: startDate.toISOString(),
+        });
+
+        // Search emails using provider
+        const searchResult = await provider.getMessagesWithPagination({
+          query: searchQuery,
+          maxResults,
+          after: startDate,
+        });
+
+        const { messages } = searchResult;
+
+        if (messages.length === 0) {
+          return {
+            searchParameters: {
+              query,
+              fromDomain,
+              timeframe,
+              searchedFrom: startDate.toISOString().split("T")[0],
+              searchedTo: now.toISOString().split("T")[0],
+              gmailQuery: searchQuery,
+            },
+            totalFound: 0,
+            results: [],
+            summary: `No emails found matching "${searchQuery}" in the last ${timeframe}.`,
+          };
+        }
+
+        // Format results for UI display
+        const emailsWithContent = messages.map((message) => ({
+          id: message.id,
+          messageId: message.id,
+          threadId: message.threadId || "",
+          date: new Date(message.date || 0).toISOString().split("T")[0],
+          from: message.from || "",
+          fromName: message.fromName || "",
+          to: message.to || "",
+          subject: message.subject || "[No Subject]",
+          snippet:
+            message.snippet ||
+            `${message.textPlain?.substring(0, 150)}...` ||
+            "[No Content]",
+          isRead: message.read || false,
+          isInInbox: message.inInbox || false,
+          labels: message.labelIds || [],
+        }));
+
+        const summary = `Found ${emailsWithContent.length} emails matching "${searchQuery}" in the last ${timeframe}. Searched Gmail directly via API.`;
+
+        return {
+          searchParameters: {
+            query,
+            fromDomain,
+            timeframe,
+            searchedFrom: startDate.toISOString().split("T")[0],
+            searchedTo: now.toISOString().split("T")[0],
+            gmailQuery: searchQuery,
+          },
+          totalFound: emailsWithContent.length,
+          results: emailsWithContent,
+          summary,
+          note: "Searched Gmail directly via API - includes all emails, not just those synced to Inbox Zero.",
+        };
+      } catch (error) {
+        logger.error("Failed to search historical emails", { error });
+        return {
+          error: "Failed to search historical emails",
+          message: error instanceof Error ? error.message : String(error),
+        };
+      }
+    },
+  });
+
+export type SearchHistoricalEmailsTool = InferUITool<
+  ReturnType<typeof searchHistoricalEmailsTool>
+>;
+
 export async function aiProcessAssistantChat({
   messages,
   emailAccountId,
@@ -677,6 +842,8 @@ export async function aiProcessAssistantChat({
   
 You can't perform any actions on their inbox.
 You can only adjust the rules that manage the inbox.
+
+You can search through the user's historical emails to find patterns and examples that help create better rules. This is especially useful when users ask you to create rules for specific categories like "giving", "receipts", "newsletters", etc.
 
 A rule is comprised of:
 1. A condition
@@ -978,6 +1145,7 @@ Examples:
       updateLearnedPatterns: updateLearnedPatternsTool(toolOptions),
       updateAbout: updateAboutTool(toolOptions),
       addToKnowledgeBase: addToKnowledgeBaseTool(toolOptions),
+      searchHistoricalEmails: searchHistoricalEmailsTool(toolOptions),
     },
   });
 
