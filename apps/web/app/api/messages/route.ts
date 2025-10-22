@@ -62,12 +62,16 @@ async function getMessages({
           // Only show sent message that are in the inbox
           return isInbox;
         }
+
+        // Only process messages that are in the inbox (not archived by Gmail rules)
+        return isInbox;
       } else if (emailProvider.name === "microsoft") {
         // For Outlook, we already filter out drafts in the message fetching
-        // No additional filtering needed here
+        // You could add similar inbox filtering here if needed for Outlook
+        return true;
       }
 
-      // Return all other messages
+      // Default: only process messages if they're in inbox
       return true;
     });
 

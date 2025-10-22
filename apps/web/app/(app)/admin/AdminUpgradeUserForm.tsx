@@ -37,7 +37,7 @@ export const AdminUpgradeUserForm = () => {
     formState: { errors },
     getValues,
   } = useForm<ChangePremiumStatusOptions>({
-    resolver: zodResolver(changePremiumStatusSchema),
+    resolver: zodResolver(changePremiumStatusSchema) as any,
     defaultValues: {
       period: PremiumTier.BUSINESS_ANNUALLY,
     },

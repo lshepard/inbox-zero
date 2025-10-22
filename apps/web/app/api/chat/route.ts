@@ -40,7 +40,7 @@ export const POST = withEmailAccount(async (request) => {
   const json = await request.json();
   const { data, error } = assistantInputSchema.safeParse(json);
 
-  if (error) return NextResponse.json({ error: error.errors }, { status: 400 });
+  if (error) return NextResponse.json({ error: error.issues }, { status: 400 });
 
   const chat =
     (await getChatById(data.id)) ||

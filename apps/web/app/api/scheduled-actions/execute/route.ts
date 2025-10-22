@@ -31,7 +31,7 @@ export const POST = verifySignatureAppRouter(
 
       if (!validationResult.success) {
         logger.error("Invalid payload structure", {
-          errors: validationResult.error.errors,
+          errors: validationResult.error.issues,
           receivedPayload: rawPayload,
         });
         return new Response("Invalid payload structure", { status: 400 });

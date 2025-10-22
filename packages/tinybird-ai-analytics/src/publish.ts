@@ -20,6 +20,6 @@ const tb = getTinybird();
 export const publishAiCall = tb
   ? tb.buildIngestEndpoint({
       datasource: "aiCall",
-      event: tinybirdAiCall,
+      event: tinybirdAiCall as any,
     })
   : () => {};

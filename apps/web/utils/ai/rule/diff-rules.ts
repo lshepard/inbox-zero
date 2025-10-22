@@ -13,7 +13,12 @@ export async function aiDiffRules({
   oldPromptFile: string;
   newPromptFile: string;
 }) {
-  const diff = createPatch("prompt", oldPromptFile, newPromptFile);
+  const diff = createPatch(
+    "old_prompt",
+    "new_prompt",
+    oldPromptFile,
+    newPromptFile,
+  );
 
   const system =
     "You are an AI assistant that analyzes differences between two prompt files and identifies added, edited, and removed rules.";
