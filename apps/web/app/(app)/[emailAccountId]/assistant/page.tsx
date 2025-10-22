@@ -13,10 +13,13 @@ export const maxDuration = 300; // Applies to the actions
 
 export default async function AssistantPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ emailAccountId: string }>;
+  searchParams: Promise<{ onboarding?: string }>;
 }) {
   const { emailAccountId } = await params;
+  const { onboarding } = await searchParams;
   await checkUserOwnsEmailAccount({ emailAccountId });
 
   // onboarding redirect
@@ -31,7 +34,12 @@ export default async function AssistantPage({
     });
 
     if (!hasRule) {
-      redirect(prefixPath(emailAccountId, "/assistant?onboarding=true"));
+      if (onboarding === "true") {
+        // If already on onboarding URL, redirect to onboarding flow
+        redirect(prefixPath(emailAccountId, "/assistant/onboarding"));
+      } else {
+        redirect(prefixPath(emailAccountId, "/assistant?onboarding=true"));
+      }
     }
   }
 
