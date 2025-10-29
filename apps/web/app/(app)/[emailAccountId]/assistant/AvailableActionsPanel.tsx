@@ -21,6 +21,7 @@ const actionNames: Record<ActionType, string> = {
   [ActionType.SEND_EMAIL]: "Send email",
   [ActionType.CALL_WEBHOOK]: "Call webhook",
   [ActionType.DIGEST]: "Add to digest",
+  [ActionType.NEEDS_ACTION]: "Needs action",
 };
 
 const actionTooltips: Partial<Record<ActionType, string>> = {

@@ -153,6 +153,7 @@ export const actionInputs: Record<
       },
     ],
   },
+  [ActionType.NEEDS_ACTION]: { fields: [] },
 };
 
 export function getActionFields(fields: Action | ExecutedAction | undefined) {
@@ -221,6 +222,7 @@ export function sanitizeActionFields(
     case ActionType.MARK_SPAM:
     case ActionType.MARK_READ:
     case ActionType.DIGEST:
+    case ActionType.NEEDS_ACTION:
       return base;
     case ActionType.MOVE_FOLDER: {
       return {

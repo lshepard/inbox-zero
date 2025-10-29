@@ -12,6 +12,7 @@ import {
   FileTextIcon,
   MailIcon,
   NewspaperIcon,
+  CheckCircleIcon,
 } from "lucide-react";
 import { truncate } from "@/utils/string";
 
@@ -76,6 +77,8 @@ export function getActionDisplay(
       return "Digest";
     case ActionType.CALL_WEBHOOK:
       return "Call Webhook";
+    case ActionType.NEEDS_ACTION:
+      return "Needs Action";
     default: {
       const exhaustiveCheck: never = action.type;
       return exhaustiveCheck;
@@ -107,6 +110,8 @@ export function getActionIcon(actionType: ActionType) {
       return WebhookIcon;
     case ActionType.DIGEST:
       return NewspaperIcon;
+    case ActionType.NEEDS_ACTION:
+      return CheckCircleIcon;
     default: {
       const exhaustiveCheck: never = actionType;
       return exhaustiveCheck;
