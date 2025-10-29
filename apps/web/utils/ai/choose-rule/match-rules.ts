@@ -2,6 +2,7 @@ import { getConditionTypes, isAIRule } from "@/utils/condition";
 import {
   findMatchingGroup,
   getGroupsWithRules,
+  type GroupsWithRules,
 } from "@/utils/group/find-matching-group";
 import type { ParsedMessage, RuleWithActions } from "@/utils/types";
 import {
@@ -74,7 +75,12 @@ export async function findMatchingRules({
       });
 
       return {
-        matches: [{ rule: coldRule, matchReasons: [] }],
+        matches: [
+          {
+            rule: coldRule,
+            matchReasons: [{ type: ConditionType.AI }],
+          },
+        ],
         reasoning: coldEmailResult.reason,
       };
     }
@@ -275,9 +281,8 @@ export function evaluateRuleConditions({
       // No static match, but have AI - need to check AI
       return { matched: false, potentialAiMatch: true, matchReasons };
     }
-    // No conditions at all (match everything) or no matches
-    const matched = !hasStaticCondition && !hasAiCondition;
-    return { matched, potentialAiMatch: false, matchReasons };
+    // No conditions means no match
+    return { matched: false, potentialAiMatch: false, matchReasons };
   } else {
     // AND logic
     if (hasStaticCondition && !staticMatch) {
@@ -288,15 +293,15 @@ export function evaluateRuleConditions({
       // Static passed (or doesn't exist), but need AI to complete AND
       return { matched: false, potentialAiMatch: true, matchReasons };
     }
-    // Only static (and it passed), or no conditions at all (match everything)
-    const matched = hasStaticCondition ? staticMatch : true;
+    // Only static (and it passed), or no conditions (no match)
+    const matched = hasStaticCondition ? staticMatch : false;
     return { matched, potentialAiMatch: false, matchReasons };
   }
 }
 
 // Lazy load learned patterns when needed
 class LearnedPatternsLoader {
-  private groups?: Awaited<ReturnType<typeof getGroupsWithRules>> | null;
+  private groups?: GroupsWithRules | null;
 
   async getGroups(emailAccountId: string) {
     if (this.groups === undefined)
@@ -345,6 +350,8 @@ function getMatchReason(matchReasons?: MatchReason[]): string | undefined {
           return `Matched learned pattern: "${reason.groupItem.type}: ${reason.groupItem.value}"`;
         case ConditionType.PRESET:
           return "Matched a system preset";
+        case ConditionType.AI:
+          return "Matched via AI";
       }
     })
     .join(", ");
@@ -496,10 +503,10 @@ export function splitEmailPatterns(pattern: string): string[] {
 
 function matchesGroupRule(
   rule: RuleWithActions,
-  groups: Awaited<ReturnType<typeof getGroupsWithRules>>,
+  groups: GroupsWithRules,
   message: ParsedMessage,
 ) {
-  const ruleGroup = groups.find((g) => g.rule?.id === rule.id);
+  const ruleGroup = groups.find((g) => g.id === rule.groupId);
   if (!ruleGroup)
     return { group: null, matchingItem: null, ruleExcluded: false };
 

@@ -120,14 +120,15 @@ model EmailAccount {
   personaAnalysis           Json? // ai analysis of the user's persona
   role                      String? // the role confirmed by the user - previously `User.surveyRole`
 
-  statsEmailFrequency   Frequency         @default(WEEKLY)
-  summaryEmailFrequency Frequency         @default(WEEKLY)
-  lastSummaryEmailAt    DateTime?
-  coldEmailBlocker      ColdEmailSetting? // @deprecated
-  coldEmailDigest       Boolean           @default(false) // @deprecated
-  coldEmailPrompt       String? // @deprecated
-  rulesPrompt           String? // @deprecated
-  autoCategorizeSenders Boolean           @default(false)
+  statsEmailFrequency       Frequency         @default(WEEKLY)
+  summaryEmailFrequency     Frequency         @default(WEEKLY)
+  lastSummaryEmailAt        DateTime?
+  coldEmailBlocker          ColdEmailSetting? // @deprecated
+  coldEmailDigest           Boolean           @default(false) // @deprecated
+  coldEmailPrompt           String? // @deprecated
+  rulesPrompt               String? // @deprecated
+  autoCategorizeSenders     Boolean           @default(false)
+  multiRuleSelectionEnabled Boolean           @default(false)
 
   digestSchedule Schedule?
 
@@ -468,14 +469,15 @@ model RuleHistory {
 // Rule/Action models represent the rules and actions that the AI can take.
 // ExecutedRule/ExecutedAction models represent the rules/actions that have been planned or executed by the AI.
 model ExecutedRule {
-  id        String             @id @default(cuid())
-  createdAt DateTime           @default(now())
-  updatedAt DateTime           @updatedAt
-  threadId  String
-  messageId String
-  status    ExecutedRuleStatus
-  automated Boolean
-  reason    String?
+  id            String             @id @default(cuid())
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+  threadId      String
+  messageId     String
+  status        ExecutedRuleStatus
+  automated     Boolean
+  reason        String?
+  matchMetadata Json? // Stores structured match information (e.g., learned patterns, match types)
 
   // may be null if the rule was deleted
   ruleId String?
