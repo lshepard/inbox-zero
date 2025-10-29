@@ -110,15 +110,31 @@ export const GET = withError(async (request) => {
     }
 
     if (existingAccount.userId === targetUserId) {
-      logger.warn(
-        "Google account is already linked to the correct user. Merge action unnecessary.",
+      logger.info(
+        "Google account is already linked to the correct user. Updating tokens for reauthentication.",
         {
           email: providerEmail,
           providerAccountId,
           userId: targetUserId,
         },
       );
-      redirectUrl.searchParams.set("error", "already_linked_to_self");
+
+      // Save the fresh tokens from reauthentication
+      const { saveTokens } = await import("@/utils/auth");
+      await saveTokens({
+        tokens: {
+          access_token: tokens.access_token || undefined,
+          refresh_token: tokens.refresh_token || undefined,
+          expires_at: tokens.expiry_date
+            ? Math.floor(tokens.expiry_date / 1000)
+            : undefined,
+        },
+        accountRefreshToken: tokens.refresh_token || null,
+        providerAccountId,
+        provider: "google",
+      });
+
+      redirectUrl.searchParams.set("success", "tokens_refreshed");
       return NextResponse.redirect(redirectUrl, {
         headers: response.headers,
       });

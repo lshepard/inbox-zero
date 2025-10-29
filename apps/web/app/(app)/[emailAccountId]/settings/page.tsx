@@ -5,6 +5,7 @@ import { BillingSection } from "@/app/(app)/[emailAccountId]/settings/BillingSec
 import { DeleteSection } from "@/app/(app)/[emailAccountId]/settings/DeleteSection";
 import { ModelSection } from "@/app/(app)/[emailAccountId]/settings/ModelSection";
 import { MultiAccountSection } from "@/app/(app)/[emailAccountId]/settings/MultiAccountSection";
+import { ReauthenticateSection } from "@/app/(app)/[emailAccountId]/settings/ReauthenticateSection";
 import { ResetAnalyticsSection } from "@/app/(app)/[emailAccountId]/settings/ResetAnalyticsSection";
 import { WebhookSection } from "@/app/(app)/[emailAccountId]/settings/WebhookSection";
 import { FormSection, FormWrapper } from "@/components/Form";
@@ -52,6 +53,8 @@ export default function SettingsPage() {
                   Settings for {emailAccount?.email}
                 </SectionDescription>
               </FormSection>
+
+              <ReauthenticateSection />
 
               <ResetAnalyticsSection />
 

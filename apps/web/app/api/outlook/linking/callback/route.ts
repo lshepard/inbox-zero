@@ -204,11 +204,33 @@ export const GET = withError(async (request) => {
     }
 
     if (existingAccount.userId === targetUserId) {
-      logger.warn(
-        "Microsoft account is already linked to the correct user. Merge action unnecessary.",
+      logger.info(
+        "Microsoft account is already linked to the correct user. Updating tokens for reauthentication.",
         { email: providerEmail, targetUserId },
       );
-      redirectUrl.searchParams.set("error", "already_linked_to_self");
+
+      // Save the fresh tokens from reauthentication
+      let expiresAt: Date | null = null;
+      if (tokens.expires_at) {
+        expiresAt = new Date(tokens.expires_at * 1000);
+      } else if (tokens.expires_in) {
+        const expiresInSeconds =
+          typeof tokens.expires_in === "string"
+            ? Number.parseInt(tokens.expires_in, 10)
+            : tokens.expires_in;
+        expiresAt = new Date(Date.now() + expiresInSeconds * 1000);
+      }
+
+      await prisma.account.update({
+        where: { id: existingAccount.id },
+        data: {
+          access_token: tokens.access_token,
+          refresh_token: tokens.refresh_token,
+          expires_at: expiresAt,
+        },
+      });
+
+      redirectUrl.searchParams.set("success", "tokens_refreshed");
       return NextResponse.redirect(redirectUrl, {
         headers: response.headers,
       });
