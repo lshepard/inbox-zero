@@ -1,0 +1,10 @@
+[build]
+builder = "dockerfile"
+dockerfilePath = "docker/Dockerfile.prod"
+# Build arguments - Railway will use environment variables with the same name
+buildArgs = ["NEXT_PUBLIC_BASE_URL"]
+
+[deploy]
+startCommand = "sh -c 'cd /app/apps/web && pnpm exec prisma migrate deploy && pnpm exec next start'"
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 10
