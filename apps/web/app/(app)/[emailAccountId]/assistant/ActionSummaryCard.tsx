@@ -30,7 +30,9 @@ export function ActionSummaryCard({
   const actionTypeLabel =
     typeOptions.find((opt) => opt.value === action.type)?.label || action.type;
 
-  const delaySuffix = formatDelay(action.delayInMinutes);
+  const delaySuffix = formatDelay(
+    action.delayInMinutes as number | null | undefined,
+  );
 
   let summaryContent: React.ReactNode = actionTypeLabel;
   let tooltipText: string | undefined;
