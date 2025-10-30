@@ -11,7 +11,7 @@ import { getEmailTerminology } from "@/utils/terminology";
 import type { EmailLabel } from "@/providers/EmailProvider";
 
 export function ActionSummaryCard({
-  action,
+  action: actionProp,
   typeOptions,
   provider,
   labels,
@@ -21,14 +21,18 @@ export function ActionSummaryCard({
   provider: string;
   labels: EmailLabel[];
 }) {
+  // Cast to any to work around Zod type inference issues
+  const action = actionProp as any;
+
   // don't display
   if (action.type === ActionType.DIGEST) {
     return null;
   }
 
   const terminology = getEmailTerminology(provider);
-  const actionTypeLabel =
-    typeOptions.find((opt) => opt.value === action.type)?.label || action.type;
+  const actionTypeLabel: string =
+    typeOptions.find((opt) => opt.value === action.type)?.label ||
+    String(action.type);
 
   const delaySuffix = formatDelay(
     action.delayInMinutes as number | null | undefined,
@@ -209,9 +213,9 @@ export function ActionSummaryCard({
       summaryContent = actionTypeLabel;
   }
 
-  const Icon = ACTION_TYPE_ICONS[action.type] || TagIcon;
+  const Icon = ACTION_TYPE_ICONS[action.type as ActionType] || TagIcon;
   const textColorClass =
-    ACTION_TYPE_TEXT_COLORS[action.type] || "text-gray-500";
+    ACTION_TYPE_TEXT_COLORS[action.type as ActionType] || "text-gray-500";
 
   return (
     <CardBasic className="flex items-center justify-between p-4">

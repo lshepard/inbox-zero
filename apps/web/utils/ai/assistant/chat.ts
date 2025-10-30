@@ -779,7 +779,7 @@ const searchHistoricalEmailsTool = ({
         }
 
         // Format results for UI display
-        const emailsWithContent = messages.map((message) => ({
+        const emailsWithContent = messages.map((message: any) => ({
           id: message.id,
           messageId: message.id,
           threadId: message.threadId || "",
