@@ -21,6 +21,13 @@ import type { MessageContext } from "@/app/api/chat/validation";
 import { stringifyEmail } from "@/utils/stringify-email";
 import { getEmailForLLM } from "@/utils/get-email-from-message";
 import type { ParsedMessage } from "@/utils/types";
+import {
+  getTodaysEmailsTool,
+  markNeedsReplyTool,
+  createTaskFromEmailTool,
+  getEmailDetailsTool,
+  getInboxStatsTool,
+} from "@/utils/ai/assistant/triage-tools";
 
 const logger = createScopedLogger("ai/assistant/chat");
 
@@ -1146,6 +1153,12 @@ Examples:
       updateAbout: updateAboutTool(toolOptions),
       addToKnowledgeBase: addToKnowledgeBaseTool(toolOptions),
       searchHistoricalEmails: searchHistoricalEmailsTool(toolOptions),
+      // Email triage tools
+      getTodaysEmails: getTodaysEmailsTool(toolOptions),
+      markNeedsReply: markNeedsReplyTool(toolOptions),
+      createTaskFromEmail: createTaskFromEmailTool(toolOptions),
+      getEmailDetails: getEmailDetailsTool(toolOptions),
+      getInboxStats: getInboxStatsTool(toolOptions),
     },
   });
 
