@@ -7,6 +7,7 @@ import { ModelSection } from "@/app/(app)/[emailAccountId]/settings/ModelSection
 import { MultiAccountSection } from "@/app/(app)/[emailAccountId]/settings/MultiAccountSection";
 import { ReauthenticateSection } from "@/app/(app)/[emailAccountId]/settings/ReauthenticateSection";
 import { ResetAnalyticsSection } from "@/app/(app)/[emailAccountId]/settings/ResetAnalyticsSection";
+import { WatchEmailsSection } from "@/app/(app)/[emailAccountId]/settings/WatchEmailsSection";
 import { WebhookSection } from "@/app/(app)/[emailAccountId]/settings/WebhookSection";
 import { FormSection, FormWrapper } from "@/components/Form";
 import { PageHeader } from "@/components/PageHeader";
@@ -55,6 +56,8 @@ export default function SettingsPage() {
               </FormSection>
 
               <ReauthenticateSection />
+
+              <WatchEmailsSection />
 
               <ResetAnalyticsSection />
 
