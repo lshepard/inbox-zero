@@ -1,25 +1,35 @@
 import type { Metadata } from "next";
-import { HeroHome } from "@/app/(landing)/home/Hero";
-import { BasicLayout } from "@/components/layouts/BasicLayout";
-import { FeaturesHome } from "@/app/(landing)/home/Features";
-import { Privacy } from "@/app/(landing)/home/Privacy";
-import { Testimonials } from "@/app/(landing)/home/Testimonials";
-import { PricingLazy } from "@/app/(app)/premium/PricingLazy";
-import { FAQs } from "@/app/(landing)/home/FAQs";
-import { CTA } from "@/app/(landing)/home/CTA";
+import Link from "next/link";
 
 export const metadata: Metadata = { alternates: { canonical: "/" } };
 
 export default function Home() {
   return (
-    <BasicLayout>
-      <HeroHome />
-      <FeaturesHome />
-      <Testimonials />
-      <PricingLazy className="pb-32" />
-      <Privacy />
-      <FAQs />
-      <CTA />
-    </BasicLayout>
+    <div className="flex min-h-screen items-center justify-center bg-white">
+      <div className="text-center">
+        <h1 className="mb-4 text-2xl font-medium text-gray-900">
+          Confabulous Inbox
+        </h1>
+        <p className="mb-6 text-gray-600">Private email management system</p>
+        <div className="space-y-2">
+          <div>
+            <Link
+              href="/login"
+              className="text-blue-600 underline hover:text-blue-800"
+            >
+              Log in
+            </Link>
+          </div>
+          <div>
+            <Link
+              href="/privacy"
+              className="text-sm text-gray-500 underline hover:text-gray-700"
+            >
+              Privacy Policy & Terms
+            </Link>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
