@@ -29,6 +29,7 @@ model Account {
   emailAccount          EmailAccount?
 
   @@unique([provider, providerAccountId])
+  @@index([userId])
 }
 
 // not in use. we only use jwt for sessions
@@ -45,6 +46,9 @@ model Session {
 
   activeOrganizationId String?
   activeOrganization   Organization? @relation(fields: [activeOrganizationId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([activeOrganizationId])
 }
 
 model User {
@@ -109,16 +113,19 @@ model EmailAccount {
   name  String? // Name associated with the Google account
   image String? // Profile image URL from the Google account
 
-  about                     String?
-  writingStyle              String?
-  signature                 String? // User's email signature from provider or manually set
-  includeReferralSignature  Boolean   @default(true)
-  watchEmailsExpirationDate DateTime?
-  watchEmailsSubscriptionId String? // For Outlook subscription ID
-  lastSyncedHistoryId       String?
-  behaviorProfile           Json?
-  personaAnalysis           Json? // ai analysis of the user's persona
-  role                      String? // the role confirmed by the user - previously `User.surveyRole`
+  about                          String?
+  writingStyle                   String?
+  signature                      String? // User's email signature from provider or manually set
+  includeReferralSignature       Boolean   @default(true)
+  watchEmailsExpirationDate      DateTime?
+  watchEmailsSubscriptionId      String? // For Outlook subscription ID
+  watchEmailsSubscriptionHistory Json? // Historical Outlook subscription IDs: [{ subscriptionId, createdAt, replacedAt }]
+  lastSyncedHistoryId            String?
+  behaviorProfile                Json?
+  personaAnalysis                Json? // ai analysis of the user's persona
+  role                           String? // the role confirmed by the user - previously `User.surveyRole`
+  timezone                       String? // User's timezone (IANA tz database format, e.g., "America/Los_Angeles", "Asia/Jerusalem") - handles DST automatically
+  calendarBookingLink            String? // User's calendar booking link
 
   statsEmailFrequency       Frequency         @default(WEEKLY)
   summaryEmailFrequency     Frequency         @default(WEEKLY)
@@ -160,6 +167,7 @@ model EmailAccount {
   calendarConnections CalendarConnection[]
   mcpConnections      McpConnection[]
 
+  @@index([userId])
   @@index([lastSummaryEmailAt])
 }
 
@@ -202,6 +210,8 @@ model Invitation {
   inviterId      String
   inviter        EmailAccount @relation(fields: [inviterId], references: [id], onDelete: Cascade)
 
+  @@index([organizationId])
+  @@index([inviterId])
   @@map("invitation")
 }
 
@@ -228,6 +238,8 @@ model SsoProvider {
   organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   domain         String
 
+  @@index([emailAccountId])
+  @@index([organizationId])
   @@map("ssoProvider")
 }
 
@@ -259,6 +271,8 @@ model DigestItem {
   coldEmail   ColdEmail?      @relation(fields: [coldEmailId], references: [id])
 
   @@unique([digestId, threadId, messageId])
+  @@index([actionId])
+  @@index([coldEmailId])
 }
 
 model Schedule {
@@ -435,6 +449,8 @@ model Action {
   folderName     String?
   folderId       String?
   delayInMinutes Int?
+
+  @@index([ruleId])
 }
 
 model RuleHistory {
@@ -521,6 +537,8 @@ model ExecutedAction {
   draftSendLog    DraftSendLog? // Will exist if the draft was sent
   digestItems     DigestItem[] // Relation to digest items created by this action
   scheduledAction ScheduledAction? // Reverse relation for delayed actions
+
+  @@index([executedRuleId])
 }
 
 model ScheduledAction {
@@ -555,6 +573,7 @@ model ScheduledAction {
   executedAction ExecutedAction? @relation(fields: [executedActionId], references: [id], onDelete: Cascade)
   emailAccount   EmailAccount    @relation(fields: [emailAccountId], references: [id], onDelete: Cascade)
 
+  @@index([executedRuleId])
   @@index([status, scheduledFor])
   @@index([emailAccountId, messageId])
 }
@@ -632,6 +651,7 @@ model Newsletter {
 
   @@unique([email, emailAccountId])
   @@index([emailAccountId, status])
+  @@index([categoryId])
 }
 
 model ColdEmail {
@@ -717,6 +737,8 @@ model CleanupJob {
   emailAccount   EmailAccount @relation(fields: [emailAccountId], references: [id], onDelete: Cascade)
 
   threads CleanupThread[]
+
+  @@index([emailAccountId])
 }
 
 model CleanupThread {
@@ -730,6 +752,8 @@ model CleanupThread {
 
   emailAccountId String
   emailAccount   EmailAccount @relation(fields: [emailAccountId], references: [id], onDelete: Cascade)
+
+  @@index([jobId])
 }
 
 model Knowledge {
@@ -768,6 +792,8 @@ model EmailToken {
 
   emailAccountId String
   emailAccount   EmailAccount @relation(fields: [emailAccountId], references: [id], onDelete: Cascade)
+
+  @@index([emailAccountId])
 }
 
 model Payment {
@@ -799,6 +825,8 @@ model Payment {
 
   // Metadata
   billingReason String? // initial, renewal, update, etc.
+
+  @@index([premiumId])
 }
 
 model DraftSendLog {

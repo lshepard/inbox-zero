@@ -44,6 +44,7 @@ export const Model = {
   GEMINI_2_5_PRO: "gemini-2.5-pro",
   GEMINI_2_0_FLASH_OPENROUTER: "google/gemini-2.0-flash",
   GEMINI_2_5_PRO_OPENROUTER: "google/gemini-2.5-pro",
+  GEMINI_3_PRO_PREVIEW_OPENROUTER: "google/gemini-3-pro-preview",
   // Other models
   GROQ_LLAMA_3_3_70B: "llama-3.3-70b-versatile",
   KIMI_K2_OPENROUTER: "moonshotai/kimi-k2",

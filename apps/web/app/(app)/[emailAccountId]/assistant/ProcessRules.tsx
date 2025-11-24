@@ -16,6 +16,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { toastError } from "@/components/Toast";
 import { LoadingContent } from "@/components/LoadingContent";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import type { MessagesResponse } from "@/app/api/messages/route";
 import { EmailMessageCell } from "@/components/EmailMessageCell";
 import { runRulesAction } from "@/utils/actions/ai-rule";
@@ -29,7 +30,7 @@ import { isAIRule, isGroupRule, isStaticRule } from "@/utils/condition";
 import { BulkRunRules } from "@/app/(app)/[emailAccountId]/assistant/BulkRunRules";
 import { cn } from "@/utils";
 import { TestCustomEmailForm } from "@/app/(app)/[emailAccountId]/assistant/TestCustomEmailForm";
-import { ProcessResultDisplay } from "@/app/(app)/[emailAccountId]/assistant/ProcessResultDisplay";
+import { ResultsDisplay } from "@/app/(app)/[emailAccountId]/assistant/ResultDisplay";
 import { useAccount } from "@/providers/EmailAccountProvider";
 import { FixWithChat } from "@/app/(app)/[emailAccountId]/assistant/FixWithChat";
 import { useChat } from "@/providers/ChatProvider";
@@ -133,6 +134,7 @@ export function ProcessRulesContent({ testMode }: { testMode: boolean }) {
             reason: r.reason,
             existing: true,
             createdAt: new Date(r.createdAt),
+            status: r.status,
           }));
         }
       }
@@ -252,7 +254,7 @@ export function ProcessRulesContent({ testMode }: { testMode: boolean }) {
         </div>
 
         <div className="flex items-center gap-2">
-          {hasAiRules && testMode && (
+          {testMode && (
             <Button
               variant="ghost"
               onClick={() => setShowCustomForm((show) => !show)}
@@ -269,8 +271,16 @@ export function ProcessRulesContent({ testMode }: { testMode: boolean }) {
         </div>
       </div>
 
-      {hasAiRules && showCustomForm && testMode && (
-        <div className="my-2">
+      {showCustomForm && testMode && (
+        <div className="my-2 space-y-2">
+          {!hasAiRules && (
+            <Alert variant="destructive">
+              <AlertDescription>
+                You don't have any AI rules set up. The test won't match
+                anything. Please create AI rules first.
+              </AlertDescription>
+            </Alert>
+          )}
           <TestCustomEmailForm />
         </div>
       )}
@@ -359,9 +369,7 @@ function ProcessRulesRow({
           <div className="ml-4 flex items-center gap-1">
             {results ? (
               <>
-                <div className="flex max-w-xs flex-col justify-center gap-0.5 whitespace-nowrap">
-                  <ProcessResultDisplay results={results} />
-                </div>
+                <ResultsDisplay results={results} />
                 <FixWithChat
                   setInput={setInput}
                   message={message}
