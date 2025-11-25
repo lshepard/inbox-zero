@@ -50,7 +50,17 @@ export function Combobox(props: {
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-full p-0 sm:w-[500px]">
-        <Command>
+        <Command
+          loop={false}
+          filter={(value, search) => {
+            // Custom filter to match on label names
+            if (!search) return 1;
+            const searchLower = search.toLowerCase();
+            const valueLower = value.toLowerCase();
+            if (valueLower.includes(searchLower)) return 1;
+            return 0;
+          }}
+        >
           <CommandInput
             placeholder="Search..."
             value={props.onSearch ? props.search : undefined}
@@ -70,9 +80,12 @@ export function Combobox(props: {
                 {props.options.map((options) => (
                   <CommandItem
                     key={options.value}
-                    value={options.value}
-                    onSelect={(currentValue) => {
-                      onChangeValue(currentValue === value ? "" : currentValue);
+                    value={options.label}
+                    keywords={[options.label, options.value]}
+                    onSelect={() => {
+                      onChangeValue(
+                        value === options.value ? "" : options.value,
+                      );
                       setOpen(false);
                     }}
                   >
