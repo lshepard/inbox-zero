@@ -140,7 +140,6 @@ export const markNeedsReplyTool = ({
           type: ThreadTrackerType.NEEDS_REPLY,
           resolved: false,
           sentAt: new Date(),
-          reason: reason || "Marked as needs reply by AI assistant",
         },
       });
 
@@ -199,13 +198,13 @@ export const createTaskFromEmailTool = ({
         select: {
           user: {
             select: {
-              webhookUrl: true,
+              webhookSecret: true,
             },
           },
         },
       });
 
-      if (!emailAccount?.user?.webhookUrl) {
+      if (!emailAccount?.user?.webhookSecret) {
         return {
           success: false,
           message:
@@ -219,7 +218,7 @@ export const createTaskFromEmailTool = ({
         provider: "google", // TODO: get from account
       });
 
-      const message = await provider.getMessage({ messageId });
+      const message = await provider.getMessage(messageId);
 
       // Send to webhook
       const payload = {
@@ -241,7 +240,7 @@ export const createTaskFromEmailTool = ({
       };
 
       try {
-        const response = await fetch(emailAccount.user.webhookUrl, {
+        const response = await fetch(emailAccount.user.webhookSecret, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -297,7 +296,7 @@ export const getEmailDetailsTool = ({
         provider: "google", // TODO: get from account
       });
 
-      const message = await provider.getMessage({ messageId });
+      const message = await provider.getMessage(messageId);
 
       const result: any = {
         id: message.id,
@@ -319,7 +318,7 @@ export const getEmailDetailsTool = ({
       };
 
       if (includeThread) {
-        const thread = await provider.getThread({ threadId: message.threadId });
+        const thread = await provider.getThread(message.threadId);
         result.thread = thread.messages.map((msg: any) => ({
           id: msg.id,
           from: msg.headers.from,
@@ -384,13 +383,13 @@ export const getInboxStatsTool = ({
             provider: "google", // TODO: get from account
           });
 
-          const unreadMessages = await provider.searchEmails({
+          const result = await provider.getMessagesWithPagination({
             query: "is:unread in:inbox",
             maxResults: 1, // We just need the count
           });
 
           // Get actual count from response
-          unreadCount = unreadMessages?.length || 0;
+          unreadCount = result.messages?.length || 0;
         } catch (error) {
           logger.error("Error getting unread count", { error });
         }
