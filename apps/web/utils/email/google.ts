@@ -570,8 +570,11 @@ export class GmailProvider implements EmailProvider {
         };
       }
 
-      // Re-throw if not a "not found" error or fallback didn't work
-      throw error;
+      // Re-throw with enhanced error message including label context
+      const contextMessage = labelName
+        ? `Label "${labelName}" (ID: ${labelId}) not found`
+        : `Label ID ${labelId} not found`;
+      throw new Error(`${contextMessage}: ${errorMessage}`, { cause: error });
     }
   }
 
