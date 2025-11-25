@@ -5,6 +5,5 @@ dockerfilePath = "docker/Dockerfile.prod"
 buildArgs = ["NEXT_PUBLIC_BASE_URL"]
 
 [deploy]
-startCommand = "sh -c 'cd /app/apps/web && pnpm exec prisma migrate deploy && pnpm exec next start'"
 restartPolicyType = "on_failure"
 restartPolicyMaxRetries = 10
