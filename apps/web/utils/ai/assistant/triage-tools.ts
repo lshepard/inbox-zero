@@ -56,10 +56,11 @@ export const getTodaysEmailsTool = ({
         ? `is:unread after:${Math.floor(cutoffDate.getTime() / 1000)}`
         : `after:${Math.floor(cutoffDate.getTime() / 1000)}`;
 
-      const messages = await provider.searchEmails({
+      const result = await provider.getMessagesWithPagination({
         query,
         maxResults,
       });
+      const messages = result.messages;
 
       if (!messages || messages.length === 0) {
         return {
