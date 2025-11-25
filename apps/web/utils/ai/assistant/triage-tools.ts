@@ -3,7 +3,7 @@ import { z } from "zod";
 import prisma from "@/utils/prisma";
 import { createScopedLogger } from "@/utils/logger";
 import { createEmailProvider } from "@/utils/email/provider";
-import { ThreadTrackerType } from "@prisma/client";
+import { ThreadTrackerType } from "@/generated/prisma/enums";
 import subDays from "date-fns/subDays";
 import { decodeSnippet } from "@/utils/gmail/decode";
 
