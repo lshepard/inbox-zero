@@ -254,6 +254,12 @@ async function executeMatchedRule(
   batchTimestamp: Date,
   logger: Logger,
 ) {
+  logger.info("Executing rule", {
+    ruleId: rule.id,
+    ruleName: rule.name,
+    reason,
+  });
+
   const actionItems = await getActionItemsWithAiArgs({
     message,
     emailAccount,
@@ -361,6 +367,13 @@ async function executeMatchedRule(
 
     // Execute immediate actions if any
     if (immediateActions?.length > 0) {
+      logger.info("Executing immediate actions", {
+        ruleId: rule.id,
+        ruleName: rule.name,
+        actionCount: immediateActions.length,
+        actions: immediateActions.map((a) => a.type),
+      });
+
       await executeAct({
         client,
         userEmail: emailAccount.email,

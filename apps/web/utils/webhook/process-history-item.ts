@@ -53,7 +53,7 @@ export async function processHistoryItem(
     return;
   }
 
-  logger.info("Getting message");
+  logger.info("Fetching message details");
 
   try {
     const [parsedMessage, hasExistingRule] = await Promise.all([
@@ -69,6 +69,16 @@ export async function processHistoryItem(
           })
         : null,
     ]);
+
+    // Add email details to logger context for better tracking
+    const emailLogger = logger.with({
+      subject: parsedMessage.headers.subject,
+      from: parsedMessage.headers.from,
+      to: parsedMessage.headers.to,
+      date: parsedMessage.headers.date,
+    });
+
+    emailLogger.info("Processing email");
 
     // Get threadId from message if not provided
     const actualThreadId = threadId || parsedMessage.threadId;
@@ -90,12 +100,12 @@ export async function processHistoryItem(
 
     // if the rule has already been executed, skip
     if (finalHasExistingRule) {
-      logger.info("Skipping. Rule already exists.");
+      emailLogger.info("Skipping. Rule already exists.");
       return;
     }
 
     if (isIgnoredSender(parsedMessage.headers.from)) {
-      logger.info("Skipping. Ignored sender.");
+      emailLogger.info("Skipping. Ignored sender.");
       return;
     }
 
@@ -105,7 +115,7 @@ export async function processHistoryItem(
     const isInSentItems = parsedMessage.labelIds?.includes("SENT") || false;
 
     if (!isInInbox && !isInSentItems) {
-      logger.info("Skipping message not in inbox or sent items", {
+      emailLogger.info("Skipping message not in inbox or sent items", {
         labelIds: parsedMessage.labelIds,
       });
       return;
@@ -117,7 +127,7 @@ export async function processHistoryItem(
     });
 
     if (isForAssistant) {
-      logger.info("Passing through assistant email.");
+      emailLogger.info("Passing through assistant email.");
       return processAssistantEmail({
         message: parsedMessage,
         emailAccountId,
@@ -132,13 +142,14 @@ export async function processHistoryItem(
     });
 
     if (isFromAssistant) {
-      logger.info("Skipping. Assistant email.");
+      emailLogger.info("Skipping. Assistant email.");
       return;
     }
 
     const isOutbound = provider.isSentMessage(parsedMessage);
 
     if (isOutbound) {
+      emailLogger.info("Outbound email detected. Tracking reply.");
       await handleOutboundMessage({
         emailAccount,
         message: parsedMessage,
@@ -159,12 +170,14 @@ export async function processHistoryItem(
 
     if (sender) {
       await provider.blockUnsubscribedEmail(messageId);
-      logger.info("Skipping. Blocked unsubscribed email.", { from: email });
+      emailLogger.info("Skipping. Blocked unsubscribed email.", {
+        from: email,
+      });
       return;
     }
 
     if (!hasAiAccess) {
-      logger.info("Skipping. No AI access.");
+      emailLogger.info("Skipping. No AI access.");
       return;
     }
 
@@ -184,7 +197,7 @@ export async function processHistoryItem(
     }
 
     if (hasAutomationRules && hasAiAccess) {
-      logger.info("Running rules...");
+      emailLogger.info("Running automation rules...");
 
       await runRules({
         provider,
@@ -193,7 +206,7 @@ export async function processHistoryItem(
         emailAccount,
         isTest: false,
         modelType: "default",
-        logger,
+        logger: emailLogger,
       });
     }
   } catch (error: unknown) {
