@@ -89,7 +89,10 @@ export function Chat() {
         isArtifactVisible={false}
       />
 
-      <div className="mx-auto w-full px-4 pb-4 md:max-w-3xl md:pb-6">
+      <div
+        className="mx-auto w-full px-4 pb-4 md:max-w-3xl md:pb-6"
+        style={{ paddingBottom: "max(1rem, env(safe-area-inset-bottom))" }}
+      >
         {context ? (
           <div className="mb-2 flex items-center gap-2">
             <span className="inline-flex items-center gap-2 rounded-full bg-muted px-3 py-1 text-xs text-muted-foreground">
