@@ -61,7 +61,7 @@ export async function processRecentEmails() {
 
   const processingTimeMs = Date.now() - startTime;
   const totalProcessed = results.reduce((sum, r) => sum + r.processed, 0);
-  const errors = results.filter((r) => r.error).length;
+  const errors = results.filter((r) => "error" in r && r.error).length;
 
   logger.info("Completed processing recent emails", {
     processingTimeMs,
