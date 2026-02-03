@@ -1,8 +1,6 @@
 import prisma from "@/utils/prisma";
-import { createScopedLogger } from "@/utils/logger";
+import type { Logger } from "@/utils/logger";
 import { isOnHigherTier } from "@/utils/premium";
-
-const logger = createScopedLogger("user/merge-premium");
 
 /**
  * Transfer premium subscription from source user to target user during account merge
@@ -11,9 +9,11 @@ const logger = createScopedLogger("user/merge-premium");
 export async function transferPremiumDuringMerge({
   sourceUserId,
   targetUserId,
+  logger,
 }: {
   sourceUserId: string;
   targetUserId: string;
+  logger: Logger;
 }) {
   logger.info("Starting premium transfer during user merge", {
     sourceUserId,
@@ -211,7 +211,7 @@ export async function transferPremiumDuringMerge({
     logger.error("Failed to transfer premium during user merge", {
       sourceUserId,
       targetUserId,
-      error: error instanceof Error ? error.message : String(error),
+      error,
     });
     // Don't rethrow - we want the merge to continue even if premium transfer fails
   }

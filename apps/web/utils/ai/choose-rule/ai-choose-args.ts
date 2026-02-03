@@ -1,14 +1,19 @@
 import { z } from "zod";
 import { InvalidArgumentError } from "ai";
-import { createGenerateObject, withRetry } from "@/utils/llms";
+import { createGenerateObject } from "@/utils/llms";
+import { withRetry } from "@/utils/llms/retry";
 import { stringifyEmail } from "@/utils/stringify-email";
-import { createScopedLogger } from "@/utils/logger";
+import type { Logger } from "@/utils/logger";
 import type { EmailAccountWithAI } from "@/utils/llms/types";
 import type { EmailForLLM, RuleWithActions } from "@/utils/types";
 import { LogicalOperator } from "@/generated/prisma/enums";
 import type { ActionType } from "@/generated/prisma/enums";
 import { getModel, type ModelType } from "@/utils/llms/model";
 import { getUserInfoPrompt } from "@/utils/ai/helpers";
+import {
+  PLAIN_TEXT_OUTPUT_INSTRUCTION,
+  PROMPT_SECURITY_INSTRUCTIONS,
+} from "@/utils/ai/security";
 
 /**
  * AI Argument Generator for Email Actions
@@ -49,6 +54,7 @@ export async function aiGenerateArgs({
   selectedRule,
   parameters,
   modelType,
+  logger,
 }: {
   email: EmailForLLM;
   emailAccount: EmailAccountWithAI;
@@ -61,13 +67,8 @@ export async function aiGenerateArgs({
     >;
   }[];
   modelType: ModelType;
+  logger: Logger;
 }): Promise<ActionArgResponse | undefined> {
-  const logger = createScopedLogger("AI Choose Args").with({
-    email: emailAccount.email,
-    ruleId: selectedRule.id,
-    ruleName: selectedRule.name,
-  });
-
   logger.info("Generating args for rule");
 
   // If no parameters, skip
@@ -123,6 +124,8 @@ export async function aiGenerateArgs({
 function getSystemPrompt() {
   return `You are an AI assistant that helps people manage their emails.
 
+${PROMPT_SECURITY_INSTRUCTIONS}
+
 <key_instructions>
 - Never mention you are an AI assistant in responses
 - Use empty strings for missing information (no placeholders like <UNKNOWN> or [PLACEHOLDER], unless explicitly allowed in the user's rule instructions)
@@ -134,6 +137,7 @@ function getSystemPrompt() {
 - IMPORTANT: For content and subject fields:
   - Use proper capitalization and punctuation (start sentences with capital letters)
   - Ensure the generated text flows naturally with surrounding template content
+- IMPORTANT: ${PLAIN_TEXT_OUTPUT_INSTRUCTION}
 </key_instructions>`;
 }
 

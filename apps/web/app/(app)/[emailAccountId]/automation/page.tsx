@@ -15,13 +15,14 @@ import { SettingsTab } from "@/app/(app)/[emailAccountId]/assistant/settings/Set
 import { TabSelect } from "@/components/TabSelect";
 import { RulesTab } from "@/app/(app)/[emailAccountId]/assistant/RulesTabNew";
 import { AIChatButton } from "@/app/(app)/[emailAccountId]/assistant/AIChatButton";
+import { AllRulesDisabledBanner } from "@/app/(app)/[emailAccountId]/assistant/AllRulesDisabledBanner";
 import { PageWrapper } from "@/components/PageWrapper";
 import { PageHeader } from "@/components/PageHeader";
 import { DismissibleVideoCard } from "@/components/VideoCard";
 import {
   STEP_KEYS,
   getStepNumber,
-} from "@/app/(app)/[emailAccountId]/onboarding/OnboardingContent";
+} from "@/app/(app)/[emailAccountId]/onboarding/steps";
 
 export const maxDuration = 300; // Applies to the actions
 
@@ -90,7 +91,6 @@ export default async function AutomationPage({
             <div>
               <PageHeader
                 title="AI Assistant"
-                description="Personalized AI to help you manage emails faster."
                 video={{
                   title: "Getting started with AI Personal Assistant",
                   description:
@@ -104,6 +104,8 @@ export default async function AutomationPage({
               <AIChatButton />
             </div>
           </div>
+
+          <AllRulesDisabledBanner />
 
           <div className="border-b border-neutral-200 pt-2">
             <TabSelect

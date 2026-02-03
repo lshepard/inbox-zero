@@ -1,6 +1,7 @@
 import { DEFAULT_COLD_EMAIL_PROMPT } from "@/utils/cold-email/prompt";
 import { isMicrosoftProvider } from "@/utils/email/provider-types";
 import { ActionType, SystemType } from "@/generated/prisma/enums";
+import { env } from "@/env";
 
 const ruleConfig: Record<
   SystemType,
@@ -13,41 +14,47 @@ const ruleConfig: Record<
     categoryAction: "label" | "label_archive" | "move_folder";
     categoryActionMicrosoft?: "move_folder";
     tooltipText: string;
+    shouldLearn: boolean;
   }
 > = {
   [SystemType.TO_REPLY]: {
     name: "To Reply",
-    instructions: "Emails you need to respond to",
+    instructions: "Emails I need to respond to",
     label: "To Reply",
     draftReply: true,
     runOnThreads: true,
     categoryAction: "label",
     tooltipText:
       "Emails you need to reply to and those where you're awaiting a reply. The label will update automatically as the conversation progresses",
-  },
-  [SystemType.FYI]: {
-    name: "FYI",
-    instructions: "Emails that don't require your response, but are important",
-    label: "FYI",
-    runOnThreads: true,
-    categoryAction: "label",
-    tooltipText: "",
+    shouldLearn: false,
   },
   [SystemType.AWAITING_REPLY]: {
     name: "Awaiting Reply",
-    instructions: "Emails you're expecting a reply to",
+    instructions: "Emails where I'm waiting for someone to get back to me",
     label: "Awaiting Reply",
     runOnThreads: true,
     categoryAction: "label",
     tooltipText: "",
+    shouldLearn: false,
+  },
+  [SystemType.FYI]: {
+    name: "FYI",
+    instructions:
+      "Important emails I should know about, but don't need to reply to",
+    label: "FYI",
+    runOnThreads: true,
+    categoryAction: "label",
+    tooltipText: "",
+    shouldLearn: false,
   },
   [SystemType.ACTIONED]: {
     name: "Actioned",
-    instructions: "Email threads that have been resolved",
+    instructions: "Conversations that are done, nothing left to do",
     label: "Actioned",
     runOnThreads: true,
     categoryAction: "label",
     tooltipText: "",
+    shouldLearn: false,
   },
   [SystemType.NEWSLETTER]: {
     name: "Newsletter",
@@ -58,6 +65,7 @@ const ruleConfig: Record<
     categoryAction: "label",
     categoryActionMicrosoft: "move_folder",
     tooltipText: "Newsletters, blogs, and publications",
+    shouldLearn: true,
   },
   [SystemType.MARKETING]: {
     name: "Marketing",
@@ -68,6 +76,7 @@ const ruleConfig: Record<
     categoryAction: "label_archive",
     categoryActionMicrosoft: "move_folder",
     tooltipText: "Promotional emails about sales and offers",
+    shouldLearn: true,
   },
   [SystemType.CALENDAR]: {
     name: "Calendar",
@@ -77,6 +86,7 @@ const ruleConfig: Record<
     runOnThreads: false,
     categoryAction: "label",
     tooltipText: "Events, appointments, and reminders",
+    shouldLearn: true,
   },
   [SystemType.RECEIPT]: {
     name: "Receipt",
@@ -87,6 +97,7 @@ const ruleConfig: Record<
     categoryAction: "label",
     categoryActionMicrosoft: "move_folder",
     tooltipText: "Invoices, receipts, and payments",
+    shouldLearn: true,
   },
   [SystemType.NOTIFICATION]: {
     name: "Notification",
@@ -96,6 +107,7 @@ const ruleConfig: Record<
     categoryAction: "label",
     categoryActionMicrosoft: "move_folder",
     tooltipText: "Alerts, status updates, and system messages",
+    shouldLearn: true,
   },
   [SystemType.COLD_EMAIL]: {
     name: "Cold Email",
@@ -106,6 +118,7 @@ const ruleConfig: Record<
     categoryActionMicrosoft: "move_folder",
     tooltipText:
       "Unsolicited sales pitches and cold emails. We'll never block someone that's emailed you before",
+    shouldLearn: true,
   },
 };
 
@@ -123,6 +136,10 @@ export function getRuleLabel(systemType: SystemType) {
   return getRuleConfig(systemType).label;
 }
 
+export function shouldLearnFromLabelRemoval(systemType: SystemType): boolean {
+  return getRuleConfig(systemType).shouldLearn;
+}
+
 export function getCategoryAction(systemType: SystemType, provider: string) {
   const config = getRuleConfig(systemType);
 
@@ -135,8 +152,8 @@ export function getCategoryAction(systemType: SystemType, provider: string) {
 
 export const SYSTEM_RULE_ORDER: SystemType[] = [
   SystemType.TO_REPLY,
-  SystemType.FYI,
   SystemType.AWAITING_REPLY,
+  SystemType.FYI,
   SystemType.ACTIONED,
   SystemType.NEWSLETTER,
   SystemType.MARKETING,
@@ -274,21 +291,24 @@ export function getDefaultActions(
   return actions;
 }
 
-export function getSystemRuleActionTypes(
-  systemType: SystemType,
-  provider: string,
-): Array<{
+type ActionTypeConfig = {
   type: ActionType;
   includeLabel?: boolean;
   includeFolder?: boolean;
-}> {
-  const config = getRuleConfig(systemType);
-  const categoryAction = getCategoryAction(systemType, provider);
-  const actionTypes: Array<{
-    type: ActionType;
-    includeLabel?: boolean;
-    includeFolder?: boolean;
-  }> = [];
+};
+
+export function getActionTypesForCategoryAction({
+  categoryAction,
+  systemType,
+  draftReply = false,
+  hasDigest = false,
+}: {
+  categoryAction: "label" | "label_archive" | "move_folder";
+  systemType?: SystemType;
+  draftReply?: boolean;
+  hasDigest?: boolean;
+}): ActionTypeConfig[] {
+  const actionTypes: ActionTypeConfig[] = [];
 
   if (categoryAction === "move_folder") {
     actionTypes.push({ type: ActionType.MOVE_FOLDER, includeFolder: true });
@@ -298,11 +318,36 @@ export function getSystemRuleActionTypes(
 
   if (categoryAction === "label_archive") {
     actionTypes.push({ type: ActionType.ARCHIVE });
+
+    if (
+      systemType === SystemType.COLD_EMAIL &&
+      env.NEXT_PUBLIC_IS_RESEND_CONFIGURED
+    ) {
+      actionTypes.push({ type: ActionType.NOTIFY_SENDER });
+    }
   }
 
-  if (config.draftReply) {
+  if (draftReply) {
     actionTypes.push({ type: ActionType.DRAFT_EMAIL });
   }
 
+  if (hasDigest) {
+    actionTypes.push({ type: ActionType.DIGEST });
+  }
+
   return actionTypes;
+}
+
+export function getSystemRuleActionTypes(
+  systemType: SystemType,
+  provider: string,
+): ActionTypeConfig[] {
+  const config = getRuleConfig(systemType);
+  const categoryAction = getCategoryAction(systemType, provider);
+
+  return getActionTypesForCategoryAction({
+    categoryAction,
+    systemType,
+    draftReply: config.draftReply,
+  });
 }

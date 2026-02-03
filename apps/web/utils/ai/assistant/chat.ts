@@ -1,6 +1,6 @@
 import { type InferUITool, tool, type ModelMessage } from "ai";
 import { z } from "zod";
-import { createScopedLogger } from "@/utils/logger";
+import type { Logger } from "@/utils/logger";
 import { createRuleSchema } from "@/utils/ai/rule/create-rule-schema";
 import prisma from "@/utils/prisma";
 import { isDuplicateError } from "@/utils/prisma-helpers";
@@ -25,15 +25,7 @@ import type { MessageContext } from "@/app/api/chat/validation";
 import { stringifyEmail } from "@/utils/stringify-email";
 import { getEmailForLLM } from "@/utils/get-email-from-message";
 import type { ParsedMessage } from "@/utils/types";
-import {
-  getTodaysEmailsTool,
-  markNeedsReplyTool,
-  createTaskFromEmailTool,
-  getEmailDetailsTool,
-  getInboxStatsTool,
-} from "@/utils/ai/assistant/triage-tools";
-
-const logger = createScopedLogger("ai/assistant/chat");
+import { env } from "@/env";
 
 export const maxDuration = 120;
 
@@ -41,9 +33,11 @@ export const maxDuration = 120;
 const getUserRulesAndSettingsTool = ({
   email,
   emailAccountId,
+  logger,
 }: {
   email: string;
   emailAccountId: string;
+  logger: Logger;
 }) =>
   tool({
     name: "getUserRulesAndSettings",
@@ -54,6 +48,7 @@ const getUserRulesAndSettingsTool = ({
       trackToolCall({
         tool: "get_user_rules_and_settings",
         email,
+        logger,
       });
 
       const emailAccount = await prisma.emailAccount.findUnique({
@@ -139,9 +134,11 @@ export type GetUserRulesAndSettingsTool = InferUITool<
 const getLearnedPatternsTool = ({
   email,
   emailAccountId,
+  logger,
 }: {
   email: string;
   emailAccountId: string;
+  logger: Logger;
 }) =>
   tool({
     name: "getLearnedPatterns",
@@ -152,7 +149,7 @@ const getLearnedPatternsTool = ({
         .describe("The name of the rule to get the learned patterns for"),
     }),
     execute: async ({ ruleName }) => {
-      trackToolCall({ tool: "get_learned_patterns", email });
+      trackToolCall({ tool: "get_learned_patterns", email, logger });
 
       const rule = await prisma.rule.findUnique({
         where: { name_emailAccountId: { name: ruleName, emailAccountId } },
@@ -192,17 +189,19 @@ const createRuleTool = ({
   email,
   emailAccountId,
   provider,
+  logger,
 }: {
   email: string;
   emailAccountId: string;
   provider: string;
+  logger: Logger;
 }) =>
   tool({
     name: "createRule",
     description: "Create a new rule",
     inputSchema: createRuleSchema(provider),
     execute: async ({ name, condition, actions }) => {
-      trackToolCall({ tool: "create_rule", email });
+      trackToolCall({ tool: "create_rule", email, logger });
 
       try {
         const rule = await createRule({
@@ -237,7 +236,7 @@ const createRuleTool = ({
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
 
-        logger.error("Failed to create rule", { error: message });
+        logger.error("Failed to create rule", { error });
 
         return { error: "Failed to create rule", message };
       }
@@ -269,16 +268,18 @@ export type UpdateRuleConditionSchema = z.infer<
 const updateRuleConditionsTool = ({
   email,
   emailAccountId,
+  logger,
 }: {
   email: string;
   emailAccountId: string;
+  logger: Logger;
 }) =>
   tool({
     name: "updateRuleConditions",
     description: "Update the conditions of an existing rule",
     inputSchema: updateRuleConditionSchema,
     execute: async ({ ruleName, condition }) => {
-      trackToolCall({ tool: "update_rule_conditions", email });
+      trackToolCall({ tool: "update_rule_conditions", email, logger });
 
       const rule = await prisma.rule.findUnique({
         where: { name_emailAccountId: { name: ruleName, emailAccountId } },
@@ -354,10 +355,12 @@ const updateRuleActionsTool = ({
   email,
   emailAccountId,
   provider,
+  logger,
 }: {
   email: string;
   emailAccountId: string;
   provider: string;
+  logger: Logger;
 }) =>
   tool({
     name: "updateRuleActions",
@@ -394,7 +397,7 @@ const updateRuleActionsTool = ({
       ),
     }),
     execute: async ({ ruleName, actions }) => {
-      trackToolCall({ tool: "update_rule_actions", email });
+      trackToolCall({ tool: "update_rule_actions", email, logger });
       const rule = await prisma.rule.findUnique({
         where: { name_emailAccountId: { name: ruleName, emailAccountId } },
         select: {
@@ -462,6 +465,7 @@ const updateRuleActionsTool = ({
         })),
         provider,
         emailAccountId,
+        logger,
       });
 
       return {
@@ -480,9 +484,11 @@ export type UpdateRuleActionsTool = InferUITool<
 const updateLearnedPatternsTool = ({
   email,
   emailAccountId,
+  logger,
 }: {
   email: string;
   emailAccountId: string;
+  logger: Logger;
 }) =>
   tool({
     name: "updateLearnedPatterns",
@@ -509,7 +515,7 @@ const updateLearnedPatternsTool = ({
         .min(1, "At least one learned pattern is required"),
     }),
     execute: async ({ ruleName, learnedPatterns }) => {
-      trackToolCall({ tool: "update_learned_patterns", email });
+      trackToolCall({ tool: "update_learned_patterns", email, logger });
 
       const rule = await prisma.rule.findUnique({
         where: { name_emailAccountId: { name: ruleName, emailAccountId } },
@@ -570,6 +576,7 @@ const updateLearnedPatternsTool = ({
           emailAccountId,
           ruleName: rule.name,
           patterns: patternsToSave,
+          logger,
         });
       }
 
@@ -584,9 +591,11 @@ export type UpdateLearnedPatternsTool = InferUITool<
 const updateAboutTool = ({
   email,
   emailAccountId,
+  logger,
 }: {
   email: string;
   emailAccountId: string;
+  logger: Logger;
 }) =>
   tool({
     name: "updateAbout",
@@ -594,7 +603,7 @@ const updateAboutTool = ({
       "Update the user's about information. Read the user's about information first as this replaces the existing information.",
     inputSchema: z.object({ about: z.string() }),
     execute: async ({ about }) => {
-      trackToolCall({ tool: "update_about", email });
+      trackToolCall({ tool: "update_about", email, logger });
       const existing = await prisma.emailAccount.findUnique({
         where: { id: emailAccountId },
         select: { about: true },
@@ -620,9 +629,11 @@ export type UpdateAboutTool = InferUITool<ReturnType<typeof updateAboutTool>>;
 const addToKnowledgeBaseTool = ({
   email,
   emailAccountId,
+  logger,
 }: {
   email: string;
   emailAccountId: string;
+  logger: Logger;
 }) =>
   tool({
     name: "addToKnowledgeBase",
@@ -632,7 +643,7 @@ const addToKnowledgeBaseTool = ({
       content: z.string(),
     }),
     execute: async ({ title, content }) => {
-      trackToolCall({ tool: "add_to_knowledge_base", email });
+      trackToolCall({ tool: "add_to_knowledge_base", email, logger });
 
       try {
         await prisma.knowledge.create({
@@ -661,188 +672,23 @@ export type AddToKnowledgeBaseTool = InferUITool<
   ReturnType<typeof addToKnowledgeBaseTool>
 >;
 
-const searchHistoricalEmailsTool = ({
-  email,
-  emailAccountId,
-}: {
-  email: string;
-  emailAccountId: string;
-}) =>
-  tool({
-    name: "searchHistoricalEmails",
-    description:
-      "Search through historical emails to find patterns and examples for rule creation",
-    inputSchema: z.object({
-      query: z
-        .string()
-        .describe(
-          "Search query - can be keywords, topics, or themes (e.g., 'philanthropy', 'donations', 'giving', 'charity')",
-        ),
-      fromDomain: z
-        .string()
-        .optional()
-        .describe("Filter by sender domain (e.g., '@charity.org')"),
-      timeframe: z
-        .enum(["1week", "1month", "3months", "6months", "1year"])
-        .default("6months")
-        .describe("How far back to search"),
-      maxResults: z
-        .number()
-        .max(50)
-        .default(20)
-        .describe("Maximum number of emails to return"),
-    }),
-    execute: async ({ query, fromDomain, timeframe, maxResults }) => {
-      trackToolCall({ tool: "search_historical_emails", email });
-
-      try {
-        // Get email account and provider
-        const emailAccount = await prisma.emailAccount.findUnique({
-          where: { id: emailAccountId },
-          select: {
-            account: {
-              select: {
-                provider: true,
-              },
-            },
-          },
-        });
-
-        if (!emailAccount?.account?.provider) {
-          return {
-            error: "Email provider not found",
-            message: "Unable to determine email provider for search",
-          };
-        }
-
-        // Create email provider
-        const { createEmailProvider } = await import("@/utils/email/provider");
-        const provider = await createEmailProvider({
-          emailAccountId,
-          provider: emailAccount.account.provider,
-        });
-
-        // Calculate date range
-        const now = new Date();
-        const timeframeMap = {
-          "1week": 7,
-          "1month": 30,
-          "3months": 90,
-          "6months": 180,
-          "1year": 365,
-        };
-        const daysBack = timeframeMap[timeframe];
-        const startDate = new Date(
-          now.getTime() - daysBack * 24 * 60 * 60 * 1000,
-        );
-
-        // Build Gmail/Outlook search query
-        let searchQuery = query;
-        if (fromDomain) {
-          const domain = fromDomain.startsWith("@")
-            ? fromDomain.slice(1)
-            : fromDomain;
-          searchQuery += ` from:${domain}`;
-        }
-
-        logger.info("Searching historical emails", {
-          searchQuery,
-          timeframe,
-          maxResults,
-          startDate: startDate.toISOString(),
-        });
-
-        // Search emails using provider
-        const searchResult = await provider.getMessagesWithPagination({
-          query: searchQuery,
-          maxResults,
-          after: startDate,
-        });
-
-        const { messages } = searchResult;
-
-        if (messages.length === 0) {
-          return {
-            searchParameters: {
-              query,
-              fromDomain,
-              timeframe,
-              searchedFrom: startDate.toISOString().split("T")[0],
-              searchedTo: now.toISOString().split("T")[0],
-              gmailQuery: searchQuery,
-            },
-            totalFound: 0,
-            results: [],
-            summary: `No emails found matching "${searchQuery}" in the last ${timeframe}.`,
-          };
-        }
-
-        // Format results for UI display
-        const emailsWithContent = messages.map((message: any) => ({
-          id: message.id,
-          messageId: message.id,
-          threadId: message.threadId || "",
-          date: new Date(message.date || 0).toISOString().split("T")[0],
-          from: message.from || "",
-          fromName: message.fromName || "",
-          to: message.to || "",
-          subject: message.subject || "[No Subject]",
-          snippet:
-            message.snippet ||
-            `${message.textPlain?.substring(0, 150)}...` ||
-            "[No Content]",
-          isRead: message.read || false,
-          isInInbox: message.inInbox || false,
-          labels: message.labelIds || [],
-        }));
-
-        const summary = `Found ${emailsWithContent.length} emails matching "${searchQuery}" in the last ${timeframe}. Searched Gmail directly via API.`;
-
-        return {
-          searchParameters: {
-            query,
-            fromDomain,
-            timeframe,
-            searchedFrom: startDate.toISOString().split("T")[0],
-            searchedTo: now.toISOString().split("T")[0],
-            gmailQuery: searchQuery,
-          },
-          totalFound: emailsWithContent.length,
-          results: emailsWithContent,
-          summary,
-          note: "Searched Gmail directly via API - includes all emails, not just those synced to Inbox Zero.",
-        };
-      } catch (error) {
-        logger.error("Failed to search historical emails", { error });
-        return {
-          error: "Failed to search historical emails",
-          message: error instanceof Error ? error.message : String(error),
-        };
-      }
-    },
-  });
-
-export type SearchHistoricalEmailsTool = InferUITool<
-  ReturnType<typeof searchHistoricalEmailsTool>
->;
-
 export async function aiProcessAssistantChat({
   messages,
   emailAccountId,
   user,
   context,
+  logger,
 }: {
   messages: ModelMessage[];
   emailAccountId: string;
   user: EmailAccountWithAI;
   context?: MessageContext;
+  logger: Logger;
 }) {
   const system = `You are an assistant that helps create and update rules to manage a user's inbox. Our platform is called Inbox Zero.
   
 You can't perform any actions on their inbox.
 You can only adjust the rules that manage the inbox.
-
-You can search through the user's historical emails to find patterns and examples that help create better rules. This is especially useful when users ask you to create rules for specific categories like "giving", "receipts", "newsletters", etc.
 
 A rule is comprised of:
 1. A condition
@@ -855,10 +701,14 @@ A condition can be:
 An action can be:
 1. Archive
 2. Label
-3. Draft a reply
+3. Draft a reply${
+    env.NEXT_PUBLIC_EMAIL_SEND_ENABLED
+      ? `
 4. Reply
 5. Send an email
-6. Forward
+6. Forward`
+      : ""
+  }
 7. Mark as read
 8. Mark spam
 9. Call a webhook
@@ -876,15 +726,23 @@ Best practices:
 - You can use multiple conditions in a rule, but aim for simplicity.
 - When creating rules, in most cases, you should use the "aiInstructions" and sometimes you will use other fields in addition.
 - If a rule can be handled fully with static conditions, do so, but this is rarely possible.
-- IMPORTANT: prefer "draft a reply" over "reply". Only if the user explicitly asks to reply, then use "reply". Clarify beforehand this is the intention. Drafting a reply is safer as it means the user can approve before sending.
+${env.NEXT_PUBLIC_EMAIL_SEND_ENABLED ? `- IMPORTANT: prefer "draft a reply" over "reply". Only if the user explicitly asks to reply, then use "reply". Clarify beforehand this is the intention. Drafting a reply is safer as it means the user can approve before sending.` : ""}
 - Use short, concise rule names (preferably a single word). For example: 'Marketing', 'Newsletters', 'Urgent', 'Receipts'. Avoid verbose names like 'Archive and label marketing emails'.
 
 Always explain the changes you made.
 Use simple language and avoid jargon in your reply.
 If you are unable to fix the rule, say so.
 
-You can set general infomation about the user too that will be passed as context when the AI is processing emails.
-Reply Zero is a feature that labels emails that need a reply "To Reply". And labels emails that are awaiting a response "Awaiting". The also is also able to see these in a minimalist UI within Inbox Zero which only shows which emails the user needs to reply to or is awaiting a response on.
+You can set general information about the user in their Personal Instructions (via the updateAbout tool) that will be passed as context when the AI is processing emails.
+
+Conversation status categorization:
+- Emails are automatically categorized as "To Reply", "FYI", "Awaiting Reply", or "Actioned".
+- IMPORTANT: Unlike regular automation rules, the prompts that determine these conversation statuses CANNOT be modified. They use fixed logic.
+- However, the user's Personal Instructions ARE passed to the AI when making these determinations. So if users want to influence how emails are categorized (e.g., "emails where I'm CC'd shouldn't be To Reply"), update their Personal Instructions with these preferences.
+- Use the updateAbout tool to add these preferences to the user's Personal Instructions.
+
+Reply Zero is a feature that labels emails that need a reply "To Reply". And labels emails that are awaiting a response "Awaiting". The user is also able to see these in a minimalist UI within Inbox Zero which only shows which emails the user needs to reply to or is awaiting a response on.
+
 Don't tell the user which tools you're using. The tools you use will be displayed in the UI anyway.
 Don't use placeholders in rules you create. For example, don't use @company.com. Use the user's actual company email address. And if you don't know some information you need, ask the user.
 
@@ -1084,12 +942,29 @@ Examples:
       </explanation>
     </output>
   </example>
+
+  <example>
+    <input>
+      If I'm CC'd on an email it shouldn't be marked as "To Reply"
+    </input>
+    <output>
+      <update_about>
+        [existing about content...]
+        
+        - Emails where I am CC'd (not in the TO field) should not be marked as "To Reply" - they are FYI only.
+      </update_about>
+      <explanation>
+        I can't directly modify the conversation status prompts, but I've added this preference to your Personal Instructions. The AI will now take this into account when categorizing your emails.
+      </explanation>
+    </output>
+  </example>
 </examples>`;
 
   const toolOptions = {
     email: user.email,
     emailAccountId,
     provider: user.account.provider,
+    logger,
   };
 
   const hiddenContextMessage =
@@ -1145,20 +1020,21 @@ Examples:
       updateLearnedPatterns: updateLearnedPatternsTool(toolOptions),
       updateAbout: updateAboutTool(toolOptions),
       addToKnowledgeBase: addToKnowledgeBaseTool(toolOptions),
-      searchHistoricalEmails: searchHistoricalEmailsTool(toolOptions),
-      // Email triage tools
-      getTodaysEmails: getTodaysEmailsTool(toolOptions),
-      markNeedsReply: markNeedsReplyTool(toolOptions),
-      createTaskFromEmail: createTaskFromEmailTool(toolOptions),
-      getEmailDetails: getEmailDetailsTool(toolOptions),
-      getInboxStats: getInboxStatsTool(toolOptions),
     },
   });
 
   return result;
 }
 
-async function trackToolCall({ tool, email }: { tool: string; email: string }) {
+async function trackToolCall({
+  tool,
+  email,
+  logger,
+}: {
+  tool: string;
+  email: string;
+  logger: Logger;
+}) {
   logger.info("Tracking tool call", { tool, email });
   return posthogCaptureEvent(email, "AI Assistant Chat Tool Call", { tool });
 }

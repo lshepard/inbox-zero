@@ -15,6 +15,8 @@ import {
   ChevronDownIcon,
   ChevronRightIcon,
   FileIcon,
+  FileTextIcon,
+  HardDriveIcon,
   InboxIcon,
   type LucideIcon,
   MailsIcon,
@@ -27,6 +29,7 @@ import {
   SparklesIcon,
   TagIcon,
   Users2Icon,
+  ZapIcon,
 } from "lucide-react";
 import { Logo } from "@/components/Logo";
 import { useComposeModal } from "@/providers/ComposeModalProvider";
@@ -49,7 +52,12 @@ import { SideNavMenu } from "@/components/SideNavMenu";
 import { CommandShortcut } from "@/components/ui/command";
 import { useSplitLabels } from "@/hooks/useLabels";
 import { LoadingContent } from "@/components/LoadingContent";
-import { useCleanerEnabled } from "@/hooks/useFeatureFlags";
+import {
+  useSmartFilingEnabled,
+  useCleanerEnabled,
+  useIntegrationsEnabled,
+  useMeetingBriefsEnabled,
+} from "@/hooks/useFeatureFlags";
 import { ClientOnly } from "@/components/ClientOnly";
 import { AccountSwitcher } from "@/components/AccountSwitcher";
 import { useAccount } from "@/providers/EmailAccountProvider";
@@ -58,6 +66,7 @@ import { ReferralDialog } from "@/components/ReferralDialog";
 import { isGoogleProvider } from "@/utils/email/provider-types";
 import { NavUser } from "@/components/NavUser";
 import { PremiumCard } from "@/components/PremiumCard";
+import { env } from "@/env";
 
 type NavItem = {
   name: string;
@@ -66,15 +75,19 @@ type NavItem = {
   target?: "_blank";
   count?: number;
   hideInMail?: boolean;
+  beta?: boolean;
+  new?: boolean;
 };
 
 export const useNavigation = () => {
-  // When we have features in early access, we can filter the navigation items
+  const showSmartFiling = useSmartFilingEnabled();
   const showCleaner = useCleanerEnabled();
+  const showMeetingBriefs = useMeetingBriefsEnabled();
+  const showIntegrations = useIntegrationsEnabled();
+
   const { emailAccountId, emailAccount, provider } = useAccount();
   const currentEmailAccountId = emailAccount?.id || emailAccountId;
 
-  // Assistant category items
   const navItems: NavItem[] = useMemo(
     () => [
       {
@@ -87,7 +100,12 @@ export const useNavigation = () => {
         href: prefixPath(currentEmailAccountId, "/bulk-unsubscribe"),
         icon: MailsIcon,
       },
-      ...(isGoogleProvider(provider)
+      {
+        name: "Bulk Archive",
+        href: prefixPath(currentEmailAccountId, "/bulk-archive"),
+        icon: ArchiveIcon,
+      },
+      ...(isGoogleProvider(provider) && showCleaner
         ? [
             {
               name: "Deep Clean",
@@ -106,8 +124,44 @@ export const useNavigation = () => {
         href: prefixPath(currentEmailAccountId, "/calendars"),
         icon: CalendarIcon,
       },
+      ...(showIntegrations
+        ? [
+            {
+              name: "Integrations",
+              href: prefixPath(currentEmailAccountId, "/integrations"),
+              icon: ZapIcon,
+              beta: true,
+            },
+          ]
+        : []),
+      ...(showSmartFiling
+        ? [
+            {
+              name: "Smart Filing",
+              href: prefixPath(currentEmailAccountId, "/drive"),
+              icon: HardDriveIcon,
+              beta: true,
+            },
+          ]
+        : []),
+      ...(showMeetingBriefs
+        ? [
+            {
+              name: "Meeting Briefs",
+              href: prefixPath(currentEmailAccountId, "/briefs"),
+              icon: FileTextIcon,
+            },
+          ]
+        : []),
     ],
-    [currentEmailAccountId, provider],
+    [
+      currentEmailAccountId,
+      provider,
+      showSmartFiling,
+      showMeetingBriefs,
+      showIntegrations,
+      showCleaner,
+    ],
   );
 
   const navItemsFiltered = useMemo(
@@ -235,9 +289,11 @@ export function SideNav({ ...props }: React.ComponentProps<typeof Sidebar>) {
       <PremiumCard isCollapsed={!state.includes("left-sidebar")} />
 
       <SidebarFooter className="pb-4">
-        <ClientOnly>
-          <ReferralDialog />
-        </ClientOnly>
+        {!env.NEXT_PUBLIC_BYPASS_PREMIUM_CHECKS && (
+          <ClientOnly>
+            <ReferralDialog />
+          </ClientOnly>
+        )}
 
         <SidebarMenuButton asChild>
           <Link href="https://docs.getinboxzero.com" target="_blank">

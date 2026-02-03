@@ -12,9 +12,34 @@ if [ -n "$NEXT_PUBLIC_BASE_URL" ]; then
     /app/docker/scripts/replace-placeholder.sh "http://NEXT_PUBLIC_BASE_URL_PLACEHOLDER" "$NEXT_PUBLIC_BASE_URL"
 fi
 
-if [ -n "$DATABASE_URL" ]; then
+if [ -n "$NEXT_PUBLIC_BYPASS_PREMIUM_CHECKS" ]; then
+    /app/docker/scripts/replace-placeholder.sh "NEXT_PUBLIC_BYPASS_PREMIUM_CHECKS_PLACEHOLDER" "$NEXT_PUBLIC_BYPASS_PREMIUM_CHECKS"
+fi
+
+if [ -n "$NEXT_PUBLIC_EMAIL_SEND_ENABLED" ]; then
+    /app/docker/scripts/replace-placeholder.sh "NEXT_PUBLIC_EMAIL_SEND_ENABLED_PLACEHOLDER" "$NEXT_PUBLIC_EMAIL_SEND_ENABLED"
+fi
+
+if [ -n "$NEXT_PUBLIC_CLEANER_ENABLED" ]; then
+    /app/docker/scripts/replace-placeholder.sh "NEXT_PUBLIC_CLEANER_ENABLED_PLACEHOLDER" "$NEXT_PUBLIC_CLEANER_ENABLED"
+fi
+
+if [ -n "$NEXT_PUBLIC_MEETING_BRIEFS_ENABLED" ]; then
+    /app/docker/scripts/replace-placeholder.sh "NEXT_PUBLIC_MEETING_BRIEFS_ENABLED_PLACEHOLDER" "$NEXT_PUBLIC_MEETING_BRIEFS_ENABLED"
+fi
+
+if [ -n "$NEXT_PUBLIC_INTEGRATIONS_ENABLED" ]; then
+    /app/docker/scripts/replace-placeholder.sh "NEXT_PUBLIC_INTEGRATIONS_ENABLED_PLACEHOLDER" "$NEXT_PUBLIC_INTEGRATIONS_ENABLED"
+fi
+
+if [ -n "$NEXT_PUBLIC_DIGEST_ENABLED" ]; then
+    /app/docker/scripts/replace-placeholder.sh "NEXT_PUBLIC_DIGEST_ENABLED_PLACEHOLDER" "$NEXT_PUBLIC_DIGEST_ENABLED"
+fi
+
+if [ -n "$DATABASE_URL" ] || [ -n "$PREVIEW_DATABASE_URL_UNPOOLED" ] || [ -n "$DIRECT_URL" ]; then
     echo "🔄 Running database migrations..."
-    if timeout 320 prisma migrate deploy --schema=./apps/web/prisma/schema.prisma; then
+    # Prisma 7 requires config file for migrations (schema no longer supports url)
+    if timeout 320 prisma migrate deploy --config=/app/docker/scripts/prisma.config.mjs --schema=./apps/web/prisma/schema.prisma; then
         echo "✅ Database migrations completed successfully"
     else
         EXIT_CODE=$?

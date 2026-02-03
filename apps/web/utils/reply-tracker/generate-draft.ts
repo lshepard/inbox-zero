@@ -1,11 +1,13 @@
 import type { ParsedMessage } from "@/utils/types";
+import { escapeHtml } from "@/utils/string";
 import { internalDateToDate } from "@/utils/date";
 import { getEmailForLLM } from "@/utils/get-email-from-message";
-import { aiDraftWithKnowledge } from "@/utils/ai/reply/draft-with-knowledge";
+import { extractEmailAddress, extractEmailAddresses } from "@/utils/email";
+import { aiDraftReply } from "@/utils/ai/reply/draft-reply";
 import { getReply, saveReply } from "@/utils/redis/reply";
 import { getWritingStyle } from "@/utils/user/get";
 import type { EmailAccountWithAI } from "@/utils/llms/types";
-import { createScopedLogger } from "@/utils/logger";
+import type { Logger } from "@/utils/logger";
 import prisma from "@/utils/prisma";
 import { aiExtractRelevantKnowledge } from "@/utils/ai/knowledge/extract";
 import { stringifyEmail } from "@/utils/stringify-email";
@@ -17,8 +19,10 @@ import { generateReferralLink } from "@/utils/referral/referral-link";
 import { aiGetCalendarAvailability } from "@/utils/ai/calendar/availability";
 import { env } from "@/env";
 import { mcpAgent } from "@/utils/ai/mcp/mcp-agent";
-
-const logger = createScopedLogger("generate-reply");
+import {
+  getMeetingContext,
+  formatMeetingContextForPrompt,
+} from "@/utils/meeting-briefs/recipient-context";
 
 /**
  * Fetches thread messages and generates draft content in one step
@@ -27,7 +31,8 @@ export async function fetchMessagesAndGenerateDraft(
   emailAccount: EmailAccountWithAI,
   threadId: string,
   client: EmailProvider,
-  testMessage?: ParsedMessage,
+  testMessage: ParsedMessage | undefined,
+  logger: Logger,
 ): Promise<string> {
   const { threadMessages, previousConversationMessages } = testMessage
     ? { threadMessages: [testMessage], previousConversationMessages: null }
@@ -38,6 +43,7 @@ export async function fetchMessagesAndGenerateDraft(
     threadMessages,
     previousConversationMessages,
     client,
+    logger,
   );
 
   if (typeof result !== "string") {
@@ -52,7 +58,10 @@ export async function fetchMessagesAndGenerateDraft(
     },
   });
 
-  let finalResult = result;
+  // Escape AI-generated content to prevent prompt injection attacks
+  // (e.g., hidden divs with sensitive data that could be leaked)
+  // Signatures and other trusted HTML are added AFTER escaping
+  let finalResult = escapeHtml(result);
 
   if (
     !env.NEXT_PUBLIC_DISABLE_REFERRAL_SIGNATURE &&
@@ -100,6 +109,7 @@ async function generateDraftContent(
   threadMessages: ParsedMessage[],
   previousConversationMessages: ParsedMessage[] | null,
   emailProvider: EmailProvider,
+  logger: Logger,
 ) {
   const lastMessage = threadMessages.at(-1);
 
@@ -141,20 +151,35 @@ async function generateDraftContent(
     calendarAvailability,
     writingStyle,
     mcpResult,
+    upcomingMeetings,
   ] = await Promise.all([
     aiExtractRelevantKnowledge({
       knowledgeBase,
       emailContent: lastMessageContent,
       emailAccount,
+      logger,
     }),
     aiCollectReplyContext({
       currentThread: messages,
       emailAccount,
       emailProvider,
     }),
-    aiGetCalendarAvailability({ emailAccount, messages }),
+    aiGetCalendarAvailability({ emailAccount, messages, logger }),
     getWritingStyle({ emailAccountId: emailAccount.id }),
     mcpAgent({ emailAccount, messages }),
+    getMeetingContext({
+      emailAccountId: emailAccount.id,
+      recipientEmail: extractEmailAddress(lastMessage.headers.from),
+      // extract all other recipients (To, CC) for privacy filtering
+      // only meetings where ALL recipients were attendees will be included
+      additionalRecipients: [
+        ...extractEmailAddresses(lastMessage.headers.to),
+        ...extractEmailAddresses(lastMessage.headers.cc ?? ""),
+      ].filter(
+        (email) => email.toLowerCase() !== emailAccount.email.toLowerCase(),
+      ),
+      logger,
+    }),
   ]);
 
   // 2b. Extract email history context
@@ -178,11 +203,12 @@ async function generateDraftContent(
         currentThreadMessages: messages,
         historicalMessages: historicalMessagesForLLM,
         emailAccount,
+        logger,
       })
     : null;
 
-  // 3. Draft with extracted knowledge
-  const text = await aiDraftWithKnowledge({
+  // 3. Draft reply
+  const text = await aiDraftReply({
     messages,
     emailAccount,
     knowledgeBaseContent: knowledgeResult?.relevantContent || null,
@@ -191,6 +217,10 @@ async function generateDraftContent(
     calendarAvailability,
     writingStyle,
     mcpContext: mcpResult?.response || null,
+    meetingContext: formatMeetingContextForPrompt(
+      upcomingMeetings,
+      emailAccount.timezone,
+    ),
   });
 
   if (typeof text === "string") {

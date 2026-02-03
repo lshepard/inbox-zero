@@ -1,6 +1,7 @@
 /* eslint-disable no-process-env */
 import { createEnv } from "@t3-oss/env-nextjs";
 import { z } from "zod";
+import { booleanString } from "@/utils/zod";
 
 const llmProviderEnum = z.enum([
   "anthropic",
@@ -13,10 +14,20 @@ const llmProviderEnum = z.enum([
   "ollama",
 ]);
 
+/** For Vercel preview deployments, auto-detect from VERCEL_URL. */
+const getBaseUrl = (): string | undefined => {
+  if (process.env.VERCEL_ENV === "preview" && process.env.VERCEL_URL) {
+    return `https://${process.env.VERCEL_URL}`;
+  }
+  return process.env.NEXT_PUBLIC_BASE_URL;
+};
+
 export const env = createEnv({
   server: {
     NODE_ENV: z.enum(["development", "production", "test"]),
     DATABASE_URL: z.string().url(),
+    PREVIEW_DATABASE_URL: z.string().url().optional(),
+    PREVIEW_DATABASE_URL_UNPOOLED: z.string().url().optional(),
 
     AUTH_SECRET: z.string().optional(),
     NEXTAUTH_SECRET: z.string().optional(),
@@ -24,6 +35,7 @@ export const env = createEnv({
     GOOGLE_CLIENT_SECRET: z.string().min(1),
     MICROSOFT_CLIENT_ID: z.string().optional(),
     MICROSOFT_CLIENT_SECRET: z.string().optional(),
+    MICROSOFT_TENANT_ID: z.string().optional().default("common"),
     EMAIL_ENCRYPT_SECRET: z.string(),
     EMAIL_ENCRYPT_SALT: z.string(),
 
@@ -56,7 +68,11 @@ export const env = createEnv({
     GROQ_API_KEY: z.string().optional(),
     OPENROUTER_API_KEY: z.string().optional(),
     AI_GATEWAY_API_KEY: z.string().optional(),
+    PERPLEXITY_API_KEY: z.string().optional(),
     OLLAMA_BASE_URL: z.string().optional(),
+    OLLAMA_MODEL: z.string().optional(),
+
+    OPENAI_ZERO_DATA_RETENTION: z.coerce.boolean().optional().default(false),
 
     UPSTASH_REDIS_URL: z.string().optional(),
     UPSTASH_REDIS_TOKEN: z.string().optional(),
@@ -75,7 +91,7 @@ export const env = createEnv({
     SENTRY_ORGANIZATION: z.string().optional(),
     SENTRY_PROJECT: z.string().optional(),
 
-    LOG_ZOD_ERRORS: z.coerce.boolean().optional(),
+    DISABLE_LOG_ZOD_ERRORS: z.coerce.boolean().optional(),
     ENABLE_DEBUG_LOGS: z.coerce.boolean().default(false),
 
     // Lemon Squeezy
@@ -111,10 +127,22 @@ export const env = createEnv({
       .optional()
       .transform((value) => value?.split(",")),
     WEBHOOK_URL: z.string().optional(),
+    INTERNAL_API_URL: z.string().optional(),
     INTERNAL_API_KEY: z.string(),
     WHITELIST_FROM: z.string().optional(),
     USE_BACKUP_MODEL: z.coerce.boolean().optional().default(false),
     HEALTH_API_KEY: z.string().optional(),
+    OAUTH_PROXY_URL: z.string().url().optional(),
+    // Additional trusted origins for CORS (comma-separated, supports wildcards like https://*.vercel.app)
+    ADDITIONAL_TRUSTED_ORIGINS: z
+      .string()
+      .optional()
+      .transform((value) =>
+        value
+          ?.split(",")
+          .map((s) => s.trim())
+          .filter(Boolean),
+      ),
 
     // license
     LICENSE_1_SEAT_VARIANT_ID: z.coerce.number().optional(),
@@ -152,7 +180,7 @@ export const env = createEnv({
     NEXT_PUBLIC_POSTHOG_ONBOARDING_SURVEY_ID: z.string().optional(),
     NEXT_PUBLIC_BASE_URL: z.string(),
     NEXT_PUBLIC_CONTACTS_ENABLED: z.coerce.boolean().optional().default(false),
-    NEXT_PUBLIC_EMAIL_SEND_ENABLED: z.coerce.boolean().optional().default(true),
+    NEXT_PUBLIC_EMAIL_SEND_ENABLED: booleanString.default(true),
     NEXT_PUBLIC_SENTRY_DSN: z.string().optional(),
     NEXT_PUBLIC_SUPPORT_EMAIL: z
       .string()
@@ -173,11 +201,6 @@ export const env = createEnv({
         if (!value) return;
         return value.split(",");
       }),
-    NEXT_PUBLIC_BEDROCK_SONNET_MODEL: z
-      .string()
-      .default("us.anthropic.claude-3-7-sonnet-20250219-v1:0"),
-    NEXT_PUBLIC_OLLAMA_MODEL: z.string().optional(),
-    NEXT_PUBLIC_APP_HOME_PATH: z.string().default("/setup"),
     NEXT_PUBLIC_DUB_REFER_DOMAIN: z.string().optional(),
     NEXT_PUBLIC_DISABLE_REFERRAL_SIGNATURE: z.coerce
       .boolean()
@@ -185,6 +208,13 @@ export const env = createEnv({
       .default(false),
     NEXT_PUBLIC_USE_AEONIK_FONT: z.coerce.boolean().optional().default(false),
     NEXT_PUBLIC_BYPASS_PREMIUM_CHECKS: z.coerce.boolean().optional(),
+    NEXT_PUBLIC_DIGEST_ENABLED: z.coerce.boolean().optional(),
+    NEXT_PUBLIC_MEETING_BRIEFS_ENABLED: z.coerce.boolean().optional(),
+    NEXT_PUBLIC_FOLLOW_UP_REMINDERS_ENABLED: z.coerce.boolean().optional(),
+    NEXT_PUBLIC_INTEGRATIONS_ENABLED: z.coerce.boolean().optional(),
+    NEXT_PUBLIC_SMART_FILING_ENABLED: z.coerce.boolean().optional(),
+    NEXT_PUBLIC_CLEANER_ENABLED: z.coerce.boolean().optional(),
+    NEXT_PUBLIC_IS_RESEND_CONFIGURED: z.coerce.boolean().optional(),
   },
   // For Next.js >= 13.4.4, you only need to destructure client variables:
   experimental__runtimeEnv: {
@@ -221,7 +251,7 @@ export const env = createEnv({
     NEXT_PUBLIC_POSTHOG_HERO_AB: process.env.NEXT_PUBLIC_POSTHOG_HERO_AB,
     NEXT_PUBLIC_POSTHOG_ONBOARDING_SURVEY_ID:
       process.env.NEXT_PUBLIC_POSTHOG_ONBOARDING_SURVEY_ID,
-    NEXT_PUBLIC_BASE_URL: process.env.NEXT_PUBLIC_BASE_URL,
+    NEXT_PUBLIC_BASE_URL: getBaseUrl(),
     NEXT_PUBLIC_CONTACTS_ENABLED: process.env.NEXT_PUBLIC_CONTACTS_ENABLED,
     NEXT_PUBLIC_EMAIL_SEND_ENABLED: process.env.NEXT_PUBLIC_EMAIL_SEND_ENABLED,
     NEXT_PUBLIC_FREE_UNSUBSCRIBE_CREDITS:
@@ -235,15 +265,23 @@ export const env = createEnv({
     NEXT_PUBLIC_AXIOM_DATASET: process.env.NEXT_PUBLIC_AXIOM_DATASET,
     NEXT_PUBLIC_AXIOM_TOKEN: process.env.NEXT_PUBLIC_AXIOM_TOKEN,
     NEXT_PUBLIC_LOG_SCOPES: process.env.NEXT_PUBLIC_LOG_SCOPES,
-    NEXT_PUBLIC_BEDROCK_SONNET_MODEL:
-      process.env.NEXT_PUBLIC_BEDROCK_SONNET_MODEL,
-    NEXT_PUBLIC_OLLAMA_MODEL: process.env.NEXT_PUBLIC_OLLAMA_MODEL,
-    NEXT_PUBLIC_APP_HOME_PATH: process.env.NEXT_PUBLIC_APP_HOME_PATH,
     NEXT_PUBLIC_DUB_REFER_DOMAIN: process.env.NEXT_PUBLIC_DUB_REFER_DOMAIN,
     NEXT_PUBLIC_DISABLE_REFERRAL_SIGNATURE:
       process.env.NEXT_PUBLIC_DISABLE_REFERRAL_SIGNATURE,
     NEXT_PUBLIC_USE_AEONIK_FONT: process.env.NEXT_PUBLIC_USE_AEONIK_FONT,
     NEXT_PUBLIC_BYPASS_PREMIUM_CHECKS:
       process.env.NEXT_PUBLIC_BYPASS_PREMIUM_CHECKS,
+    NEXT_PUBLIC_DIGEST_ENABLED: process.env.NEXT_PUBLIC_DIGEST_ENABLED,
+    NEXT_PUBLIC_MEETING_BRIEFS_ENABLED:
+      process.env.NEXT_PUBLIC_MEETING_BRIEFS_ENABLED,
+    NEXT_PUBLIC_FOLLOW_UP_REMINDERS_ENABLED:
+      process.env.NEXT_PUBLIC_FOLLOW_UP_REMINDERS_ENABLED,
+    NEXT_PUBLIC_INTEGRATIONS_ENABLED:
+      process.env.NEXT_PUBLIC_INTEGRATIONS_ENABLED,
+    NEXT_PUBLIC_SMART_FILING_ENABLED:
+      process.env.NEXT_PUBLIC_SMART_FILING_ENABLED,
+    NEXT_PUBLIC_CLEANER_ENABLED: process.env.NEXT_PUBLIC_CLEANER_ENABLED,
+    NEXT_PUBLIC_IS_RESEND_CONFIGURED:
+      process.env.NEXT_PUBLIC_IS_RESEND_CONFIGURED,
   },
 });

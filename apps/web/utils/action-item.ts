@@ -110,13 +110,13 @@ export const actionInputs: Record<
   [ActionType.FORWARD]: {
     fields: [
       {
+        name: "to",
+        label: "To",
+      },
+      {
         name: "content",
         label: "Extra Content",
         textArea: true,
-      },
-      {
-        name: "to",
-        label: "To",
       },
       {
         name: "cc",
@@ -135,7 +135,7 @@ export const actionInputs: Record<
     fields: [
       {
         name: "url",
-        label: "URL",
+        label: "Webhook URL",
         placeholder: "https://example.com/webhook",
       },
     ],
@@ -150,6 +150,9 @@ export const actionInputs: Record<
     ],
   },
   [ActionType.NEEDS_ACTION]: { fields: [] },
+  [ActionType.NOTIFY_SENDER]: {
+    fields: [],
+  },
 };
 
 export function getActionFields(fields: Action | ExecutedAction | undefined) {
@@ -276,6 +279,9 @@ export function sanitizeActionFields(
         ...base,
         url: action.url ?? null,
       };
+    }
+    case ActionType.NOTIFY_SENDER: {
+      return base;
     }
     default:
       // biome-ignore lint/correctness/noSwitchDeclarations: intentional exhaustive check

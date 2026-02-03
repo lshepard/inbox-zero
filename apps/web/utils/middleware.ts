@@ -1,6 +1,7 @@
 import { ZodError } from "zod";
 import { type NextRequest, NextResponse, after } from "next/server";
 import { randomUUID } from "node:crypto";
+import * as Sentry from "@sentry/nextjs";
 import { captureException, checkCommonErrors, SafeError } from "@/utils/error";
 import { env } from "@/env";
 import { logErrorToPosthog } from "@/utils/error.server";
@@ -10,6 +11,7 @@ import { getEmailAccount } from "@/utils/redis/account-validation";
 import { getCallerEmailAccount } from "@/utils/organizations/access";
 import {
   EMAIL_ACCOUNT_HEADER,
+  MICROSOFT_AUTH_EXPIRED_ERROR_CODE,
   NO_REFRESH_TOKEN_ERROR_CODE,
 } from "@/utils/config";
 import prisma from "@/utils/prisma";
@@ -108,12 +110,23 @@ function withMiddleware<T extends NextRequest>(
             { status: 401 },
           );
         }
+
+        if (error.message.includes("Microsoft authorization has expired")) {
+          return NextResponse.json(
+            {
+              error: error.safeMessage,
+              errorCode: MICROSOFT_AUTH_EXPIRED_ERROR_CODE,
+              isKnownError: true,
+            },
+            { status: 401 },
+          );
+        }
       }
 
       const reqLogger = getLogger(reqWithLogger);
 
       if (error instanceof ZodError) {
-        if (env.LOG_ZOD_ERRORS) {
+        if (!env.DISABLE_LOG_ZOD_ERRORS) {
           reqLogger.error("Zod validation error", { error });
         }
         return NextResponse.json(
@@ -122,9 +135,15 @@ function withMiddleware<T extends NextRequest>(
         );
       }
 
-      const apiError = checkCommonErrors(error, req.url);
+      const apiError = checkCommonErrors(error, req.url, reqLogger);
       if (apiError) {
-        await logErrorToPosthog("api", req.url, apiError.type, "unknown"); // TODO: add emailAccountId
+        await logErrorToPosthog(
+          "api",
+          req.url,
+          apiError.type,
+          "unknown",
+          reqLogger,
+        ); // TODO: add emailAccountId
 
         return NextResponse.json(
           { error: apiError.message, isKnownError: true },
@@ -151,6 +170,13 @@ function withMiddleware<T extends NextRequest>(
 
       reqLogger.error("Unhandled error", {
         error: error instanceof Error ? error.message : error,
+        cause:
+          error instanceof Error && error.cause
+            ? error.cause instanceof Error
+              ? error.cause.message
+              : error.cause
+            : undefined,
+        stack: error instanceof Error ? error.stack : undefined,
       });
       captureException(error, { extra: { url: req.url } });
 
@@ -248,6 +274,9 @@ async function emailAccountMiddleware(
     );
   }
 
+  Sentry.setTag("emailAccountId", emailAccountId);
+  Sentry.setUser({ id: userId, email });
+
   // Create a new request with email account info
   const emailAccountReq = req.clone() as RequestWithEmailAccount;
   emailAccountReq.auth = { userId, emailAccountId, email };
@@ -327,7 +356,7 @@ export function withError(
   options?: MiddlewareOptions,
 ): NextHandler;
 export function withError(
-  handler: NextHandler,
+  handler: NextHandler<RequestWithLogger>,
   options?: MiddlewareOptions,
 ): NextHandler;
 export function withError(

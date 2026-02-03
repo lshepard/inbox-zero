@@ -15,7 +15,13 @@ import { createReplyContent } from "@/utils/gmail/reply";
 import type { EmailForAction } from "@/utils/ai/types";
 import { createScopedLogger } from "@/utils/logger";
 import { withGmailRetry } from "@/utils/gmail/retry";
-import { buildReplyAllRecipients, formatCcList } from "@/utils/email/reply-all";
+import {
+  buildReplyAllRecipients,
+  formatCcList,
+  mergeAndDedupeRecipients,
+} from "@/utils/email/reply-all";
+import { formatReplySubject } from "@/utils/email/subject";
+import { buildThreadingHeaders } from "@/utils/email/threading";
 import { ensureEmailSendingEnabled } from "@/utils/mail";
 
 const logger = createScopedLogger("gmail/mail");
@@ -26,6 +32,7 @@ export const sendEmailBody = z.object({
       threadId: z.string(),
       headerMessageId: z.string(), // this is different to the gmail message id and looks something like <123...abc@mail.example.com>
       references: z.string().optional(), // for threading
+      messageId: z.string().optional(), // platform-specific message ID (Graph ID for Outlook)
     })
     .optional(),
   to: z.string(),
@@ -86,10 +93,10 @@ const createRawMailMessage = async (
     ],
     attachments,
     // https://datatracker.ietf.org/doc/html/rfc2822#appendix-A.2
-    references: replyToEmail
-      ? `${replyToEmail.references || ""} ${replyToEmail.headerMessageId}`.trim()
-      : "",
-    inReplyTo: replyToEmail ? replyToEmail.headerMessageId : "",
+    ...buildThreadingHeaders({
+      headerMessageId: replyToEmail?.headerMessageId || "",
+      references: replyToEmail?.references,
+    }),
     headers: {
       "X-Mailer": "Inbox Zero Web",
     },
@@ -111,7 +118,12 @@ export async function sendEmailWithHtml(
   } catch (error) {
     logger.error("Error converting email html to text", { error });
     // Strip HTML tags as a fallback
-    messageText = body.messageHtml.replace(/<[^>]*>/g, "");
+    // Keep new lines
+    messageText = body.messageHtml
+      .replace(/<br\s*\/?>/gi, "\n")
+      .replace(/<\/p>/gi, "\n")
+      .replace(/<[^>]*>/g, "")
+      .trim();
   }
 
   const raw = await createRawMailMessage({ ...body, messageText });
@@ -155,7 +167,7 @@ export async function replyToEmail(
   const raw = await createRawMailMessage(
     {
       to: message.headers["reply-to"] || message.headers.from,
-      subject: message.headers.subject,
+      subject: formatReplySubject(message.headers.subject),
       messageText: text,
       messageHtml: html,
       replyToEmail: {
@@ -251,6 +263,8 @@ export async function draftEmail(
     to?: string;
     subject?: string;
     content: string;
+    cc?: string;
+    bcc?: string;
     attachments?: Attachment[];
   },
   userEmail: string,
@@ -266,9 +280,16 @@ export async function draftEmail(
     userEmail,
   );
 
+  // Merge CC from reply-all with CC from args
+  const ccList = mergeAndDedupeRecipients(recipients.cc, args.cc);
+
+  // Sanitize BCC
+  const bccList = mergeAndDedupeRecipients([], args.bcc);
+
   const raw = await createRawMailMessage({
     to: recipients.to,
-    cc: formatCcList(recipients.cc),
+    cc: formatCcList(ccList),
+    bcc: formatCcList(bccList),
     subject: args.subject || originalEmail.headers.subject,
     messageHtml: html,
     messageText: text,
@@ -290,6 +311,8 @@ async function createDraft(
   threadId: string,
   raw: string,
 ) {
+  logger.info("Calling Gmail API to create draft");
+
   const result = await withGmailRetry(async () =>
     gmail.users.drafts.create({
       userId: "me",
@@ -302,20 +325,25 @@ async function createDraft(
     }),
   );
 
+  logger.info("Gmail API draft.create response received", {
+    draftId: result.data.id,
+    messageId: result.data.message?.id,
+  });
+
   return result;
 }
 
-function convertTextToHtmlParagraphs(text?: string | null): string {
+export function convertTextToHtmlParagraphs(text?: string | null): string {
   if (!text) return "";
 
-  // Split the text into paragraphs based on newline characters
-  const paragraphs = text
-    .split("\n")
-    .filter((paragraph) => paragraph.trim() !== "");
+  const normalizedText = text.replace(/\r\n/g, "\n");
+  const lines = normalizedText.split("\n");
 
-  // Wrap each paragraph with <p> tags and join them back together
-  const htmlContent = paragraphs
-    .map((paragraph) => `<p>${paragraph.trim()}</p>`)
+  const htmlContent = lines
+    .map((line) => {
+      const trimmed = line.trim();
+      return trimmed === "" ? "<br>" : `<p>${trimmed}</p>`;
+    })
     .join("");
 
   return `<html><body>${htmlContent}</body></html>`;

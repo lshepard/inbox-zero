@@ -1,5 +1,5 @@
 import { env } from "@/env";
-import { createScopedLogger } from "@/utils/logger";
+import type { Logger } from "@/utils/logger";
 import { CALENDAR_SCOPES } from "@/utils/outlook/scopes";
 import { SafeError } from "@/utils/error";
 import prisma from "@/utils/prisma";
@@ -7,8 +7,6 @@ import {
   Client,
   type AuthenticationProvider,
 } from "@microsoft/microsoft-graph-client";
-
-const logger = createScopedLogger("outlook/calendar-client");
 
 class CalendarAuthProvider implements AuthenticationProvider {
   private readonly accessToken: string;
@@ -27,15 +25,13 @@ export function getCalendarOAuth2Url(state: string): string {
     throw new Error("Microsoft login not enabled - missing client ID");
   }
 
-  const baseUrl =
-    "https://login.microsoftonline.com/common/oauth2/v2.0/authorize";
+  const baseUrl = `https://login.microsoftonline.com/${env.MICROSOFT_TENANT_ID}/oauth2/v2.0/authorize`;
   const params = new URLSearchParams({
     client_id: env.MICROSOFT_CLIENT_ID,
     response_type: "code",
     redirect_uri: `${env.NEXT_PUBLIC_BASE_URL}/api/outlook/calendar/callback`,
     scope: CALENDAR_SCOPES.join(" "),
     state,
-    prompt: "consent",
   });
 
   return `${baseUrl}?${params.toString()}`;
@@ -46,11 +42,13 @@ export const getCalendarClientWithRefresh = async ({
   refreshToken,
   expiresAt,
   emailAccountId,
+  logger,
 }: {
   accessToken?: string | null;
   refreshToken: string | null;
   expiresAt: number | null;
   emailAccountId: string;
+  logger: Logger;
 }): Promise<Client> => {
   if (!refreshToken) throw new SafeError("No refresh token");
 
@@ -67,7 +65,7 @@ export const getCalendarClientWithRefresh = async ({
     }
 
     const response = await fetch(
-      "https://login.microsoftonline.com/common/oauth2/v2.0/token",
+      `https://login.microsoftonline.com/${env.MICROSOFT_TENANT_ID}/oauth2/v2.0/token`,
       {
         method: "POST",
         headers: {
@@ -110,6 +108,7 @@ export const getCalendarClientWithRefresh = async ({
           expires_at: Math.floor(Date.now() / 1000 + Number(tokens.expires_in)),
         },
         connectionId: calendarConnection.id,
+        logger,
       });
     } else {
       logger.warn("No calendar connection found to update tokens", {
@@ -134,7 +133,10 @@ export const getCalendarClientWithRefresh = async ({
   }
 };
 
-export async function fetchMicrosoftCalendars(calendarClient: Client): Promise<
+export async function fetchMicrosoftCalendars(
+  calendarClient: Client,
+  logger: Logger,
+): Promise<
   Array<{
     id?: string;
     name?: string;
@@ -158,6 +160,7 @@ export async function fetchMicrosoftCalendars(calendarClient: Client): Promise<
 async function saveCalendarTokens({
   tokens,
   connectionId,
+  logger,
 }: {
   tokens: {
     access_token?: string;
@@ -165,6 +168,7 @@ async function saveCalendarTokens({
     expires_at?: number; // seconds
   };
   connectionId: string;
+  logger: Logger;
 }) {
   if (!tokens.access_token) {
     logger.warn("No access token to save for calendar connection", {

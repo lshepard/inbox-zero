@@ -3,7 +3,6 @@
 import * as React from "react";
 import { CommandLoading } from "cmdk";
 import { Check, ChevronsUpDown, Loader2Icon } from "lucide-react";
-
 import { cn } from "@/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -21,7 +20,7 @@ import {
 } from "@/components/ui/popover";
 
 export function Combobox(props: {
-  options: { value: string; label: string }[];
+  options: { value: string; label: string; keywords?: string[] }[];
   placeholder: string;
   emptyText: React.ReactNode;
   value?: string;
@@ -50,23 +49,18 @@ export function Combobox(props: {
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-full p-0 sm:w-[500px]">
-        <Command
-          loop={false}
-          filter={(value, search) => {
-            // Custom filter to match on label names
-            if (!search) return 1;
-            const searchLower = search.toLowerCase();
-            const valueLower = value.toLowerCase();
-            if (valueLower.includes(searchLower)) return 1;
-            return 0;
-          }}
-        >
+        <Command>
           <CommandInput
             placeholder="Search..."
             value={props.onSearch ? props.search : undefined}
             onValueChange={props.onSearch}
           />
-          <CommandList>
+          <CommandList
+            onWheelCapture={(e) => {
+              e.preventDefault();
+              e.currentTarget.scrollTop += e.deltaY;
+            }}
+          >
             {loading && (
               <CommandLoading>
                 <div className="flex items-center justify-center">
@@ -80,12 +74,14 @@ export function Combobox(props: {
                 {props.options.map((options) => (
                   <CommandItem
                     key={options.value}
-                    value={options.label}
-                    keywords={[options.label, options.value]}
-                    onSelect={() => {
-                      onChangeValue(
-                        value === options.value ? "" : options.value,
-                      );
+                    value={options.value}
+                    keywords={
+                      options.keywords
+                        ? [...options.keywords, options.label]
+                        : [options.label]
+                    }
+                    onSelect={(currentValue) => {
+                      onChangeValue(currentValue === value ? "" : currentValue);
                       setOpen(false);
                     }}
                   >

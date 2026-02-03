@@ -9,7 +9,7 @@ import { env } from "@/env";
 import { isAdminForPremium, isOnHigherTier, isPremium } from "@/utils/premium";
 import {
   cancelPremiumLemon,
-  updateAccountSeatsForPremium,
+  syncPremiumSeats,
   upgradeToPremiumLemon,
 } from "@/utils/premium/server";
 import { changePremiumStatusSchema } from "@/app/(app)/admin/validation";
@@ -192,38 +192,16 @@ export const updateMultiAccountPremiumAction = actionClientUser
       (email) =>
         !users.some((u) => u.email === email) && !userEmailAccounts.has(email),
     );
-    const updatedPremium = await prisma.premium.update({
+    await prisma.premium.update({
       where: { id: premium.id },
       data: {
         pendingInvites: {
           set: nonExistingUsers,
         },
       },
-      select: {
-        users: {
-          select: {
-            email: true,
-            _count: { select: { emailAccounts: true } },
-          },
-        },
-        pendingInvites: true,
-      },
     });
 
-    const connectedUserEmails = new Set(
-      updatedPremium.users.map((u) => u.email),
-    );
-
-    const uniquePendingInvites = (updatedPremium.pendingInvites || []).filter(
-      (email) => !connectedUserEmails.has(email),
-    );
-
-    // total seats = premium users + unique pending invites
-    const totalSeats =
-      sumBy(updatedPremium.users, (u) => u._count.emailAccounts) +
-      uniquePendingInvites.length;
-
-    await updateAccountSeatsForPremium(premium, totalSeats);
+    await syncPremiumSeats(premium.id);
   });
 
 // export const switchLemonPremiumPlanAction = actionClientUser
@@ -251,10 +229,11 @@ export const updateMultiAccountPremiumAction = actionClientUser
 export const activateLicenseKeyAction = actionClientUser
   .metadata({ name: "activateLicenseKey" })
   .inputSchema(activateLicenseKeySchema)
-  .action(async ({ ctx: { userId }, parsedInput: { licenseKey } }) => {
+  .action(async ({ ctx: { userId, logger }, parsedInput: { licenseKey } }) => {
     const lemonSqueezyLicense = await activateLemonLicenseKey(
       licenseKey,
       `License for ${userId}`,
+      logger,
     );
 
     if (lemonSqueezyLicense.error) {
@@ -477,82 +456,91 @@ export const getBillingPortalUrlAction = actionClientUser
 
 export const generateCheckoutSessionAction = actionClientUser
   .metadata({ name: "generateCheckoutSession" })
-  .inputSchema(z.object({ tier: z.nativeEnum(PremiumTier) }))
-  .action(async ({ ctx: { userId, logger }, parsedInput: { tier } }) => {
-    const priceId = getStripePriceId({ tier });
+  .inputSchema(
+    z.object({
+      tier: z.nativeEnum(PremiumTier),
+      priceId: z.string().optional(),
+    }),
+  )
+  .action(
+    async ({
+      ctx: { userId, logger },
+      parsedInput: { tier, priceId: inputPriceId },
+    }) => {
+      const priceId = inputPriceId || getStripePriceId({ tier });
 
-    if (!priceId) throw new SafeError("Unknown tier. Contact support.");
+      if (!priceId) throw new SafeError("Unknown tier. Contact support.");
 
-    const stripe = getStripe();
+      const stripe = getStripe();
 
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: {
-        email: true,
-        premium: {
-          select: {
-            id: true,
-            stripeCustomerId: true,
-            users: {
-              select: {
-                _count: { select: { emailAccounts: true } },
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: {
+          email: true,
+          premium: {
+            select: {
+              id: true,
+              stripeCustomerId: true,
+              users: {
+                select: {
+                  _count: { select: { emailAccounts: true } },
+                },
               },
             },
           },
         },
-      },
-    });
-    if (!user) {
-      logger.error("User not found");
-      throw new SafeError("User not found");
-    }
-
-    // Get the stripeCustomerId from your KV store
-    let stripeCustomerId = user.premium?.stripeCustomerId;
-
-    // Create a new Stripe customer if this user doesn't have one
-    if (!stripeCustomerId) {
-      const newCustomer = await stripe.customers.create(
-        {
-          email: user.email,
-          metadata: { userId },
-        },
-        // prevent race conditions of creating 2 customers in stripe for on user
-        // https://github.com/stripe/stripe-node/issues/476#issuecomment-402541143
-        { idempotencyKey: userId },
-      );
-
-      after(() => trackStripeCustomerCreated(user.email, newCustomer.id));
-
-      // Store the relation between userId and stripeCustomerId
-      const premium = user.premium || (await createPremiumForUser({ userId }));
-
-      stripeCustomerId = newCustomer.id;
-
-      await prisma.premium.update({
-        where: { id: premium.id },
-        data: { stripeCustomerId },
       });
-    }
+      if (!user) {
+        logger.error("User not found");
+        throw new SafeError("User not found");
+      }
 
-    const quantity =
-      sumBy(user.premium?.users || [], (u) => u._count.emailAccounts) || 1;
+      let stripeCustomerId = user.premium?.stripeCustomerId;
 
-    // ALWAYS create a checkout with a stripeCustomerId
-    const checkout = await stripe.checkout.sessions.create({
-      customer: stripeCustomerId,
-      success_url: `${env.NEXT_PUBLIC_BASE_URL}/api/stripe/success`,
-      cancel_url: `${env.NEXT_PUBLIC_BASE_URL}/premium`,
-      mode: "subscription",
-      subscription_data: { trial_period_days: 7 },
-      line_items: [{ price: priceId, quantity }],
-      allow_promotion_codes: true,
-      metadata: {
-        dubCustomerId: userId,
-      },
-    });
+      if (!stripeCustomerId) {
+        const newCustomer = await stripe.customers.create(
+          {
+            email: user.email,
+            metadata: { userId },
+          },
+          // prevent race conditions of creating 2 customers in stripe for on user
+          // https://github.com/stripe/stripe-node/issues/476#issuecomment-402541143
+          { idempotencyKey: userId },
+        );
 
-    after(() => trackStripeCheckoutCreated(user.email));
+        after(() => trackStripeCustomerCreated(user.email, newCustomer.id));
 
-    return { url: checkout.url };
-  });
+        const premium =
+          user.premium || (await createPremiumForUser({ userId }));
+
+        stripeCustomerId = newCustomer.id;
+
+        await prisma.premium.update({
+          where: { id: premium.id },
+          data: { stripeCustomerId },
+        });
+      }
+
+      const quantity =
+        sumBy(user.premium?.users || [], (u) => u._count.emailAccounts) || 1;
+
+      // ALWAYS create a checkout with a stripeCustomerId
+      const checkout = await stripe.checkout.sessions.create({
+        customer: stripeCustomerId,
+        success_url: `${env.NEXT_PUBLIC_BASE_URL}/api/stripe/success`,
+        cancel_url: `${env.NEXT_PUBLIC_BASE_URL}/premium`,
+        mode: "subscription",
+        subscription_data: { trial_period_days: 7 },
+        line_items: [{ price: priceId, quantity }],
+        allow_promotion_codes: true,
+        payment_method_collection: "always",
+        metadata: {
+          dubCustomerId: userId,
+        },
+      });
+
+      after(() => trackStripeCheckoutCreated(user.email));
+
+      return { url: checkout.url };
+    },
+  );

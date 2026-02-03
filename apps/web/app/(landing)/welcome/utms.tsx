@@ -1,12 +1,65 @@
+import { after } from "next/server";
 import prisma from "@/utils/prisma";
 import { createScopedLogger } from "@/utils/logger";
 import type { ReadonlyRequestCookies } from "next/dist/server/web/spec-extension/adapters/request-cookies";
+import type { auth } from "@/utils/auth";
 
 const logger = createScopedLogger("utms");
 
+type UtmValues = {
+  utmCampaign?: string;
+  utmMedium?: string;
+  utmSource?: string;
+  utmTerm?: string;
+  affiliate?: string;
+  referralCode?: string;
+};
+
+export function registerUtmTracking({
+  authPromise,
+  cookieStore,
+}: {
+  authPromise: ReturnType<typeof auth>;
+  cookieStore: ReadonlyRequestCookies;
+}) {
+  const utmValues = extractUtmValues(cookieStore);
+
+  after(async () => {
+    const user = await authPromise;
+    if (!user?.user) return;
+    await fetchUserAndStoreUtms(user.user.id, utmValues);
+  });
+
+  return utmValues;
+}
+
+// Extract UTM values from cookies before passing to after() callback
+// This is required because request APIs (cookies/headers) cannot be used
+// inside after() in Server Components - only in Server Actions and Route Handlers
+// See: https://nextjs.org/docs/app/api-reference/functions/after
+export function extractUtmValues(cookies: ReadonlyRequestCookies): UtmValues {
+  return {
+    utmCampaign: decodeCookieValue(cookies.get("utm_campaign")?.value),
+    utmMedium: decodeCookieValue(cookies.get("utm_medium")?.value),
+    utmSource: decodeCookieValue(cookies.get("utm_source")?.value),
+    utmTerm: decodeCookieValue(cookies.get("utm_term")?.value),
+    affiliate: decodeCookieValue(cookies.get("affiliate")?.value),
+    referralCode: decodeCookieValue(cookies.get("referral_code")?.value),
+  };
+}
+
+function decodeCookieValue(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
 export async function fetchUserAndStoreUtms(
   userId: string,
-  cookies: ReadonlyRequestCookies,
+  utmValues: UtmValues,
 ) {
   const user = await prisma.user
     .findUnique({
@@ -19,26 +72,20 @@ export async function fetchUserAndStoreUtms(
     });
 
   if (user && !user.utms) {
-    await storeUtms(userId, cookies);
+    await storeUtms(userId, utmValues);
   }
 }
 
-// `cookies` passed in as we can't do await cookies() in the `after` hook
-async function storeUtms(userId: string, cookies: ReadonlyRequestCookies) {
+async function storeUtms(userId: string, utmValues: UtmValues) {
   logger.info("Storing utms", { userId });
 
-  const utmCampaign = cookies.get("utm_campaign");
-  const utmMedium = cookies.get("utm_medium");
-  const utmSource = cookies.get("utm_source");
-  const utmTerm = cookies.get("utm_term");
-  const affiliate = cookies.get("affiliate");
-
   const utms = {
-    utmCampaign: utmCampaign?.value,
-    utmMedium: utmMedium?.value,
-    utmSource: utmSource?.value,
-    utmTerm: utmTerm?.value,
-    affiliate: affiliate?.value,
+    utmCampaign: utmValues.utmCampaign,
+    utmMedium: utmValues.utmMedium,
+    utmSource: utmValues.utmSource,
+    utmTerm: utmValues.utmTerm,
+    affiliate: utmValues.affiliate,
+    referralCode: utmValues.referralCode,
   };
 
   try {

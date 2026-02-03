@@ -23,6 +23,8 @@ Replace `<YOUR DOMAIN HERE>` with your actual domain (without the `http://` or `
 
 This creates the Copilot application structure and sets up your domain.
 
+> **Note:** The `--domain` flag only works if your domain is hosted on AWS Route53. If your domain is managed elsewhere, omit the `--domain` flag and remove the `http` section from `copilot/inbox-zero-ecs/manifest.yml` (the `alias` and `hosted_zone` fields). You'll need to configure your domain's DNS separately to point to the load balancer.
+
 ### 2. Configure the Service Manifest
 
 Before initializing the service, configure the environment variables in the manifest file. The service manifest (`copilot/inbox-zero-ecs/manifest.yml`) is already included in the repository.
@@ -180,5 +182,5 @@ If migrations fail:
 
 - [AWS Copilot Documentation](https://aws.github.io/copilot-cli/docs/)
 - [Copilot Manifest Reference](https://aws.github.io/copilot-cli/docs/manifest/overview/)
-- [Docker Self-Hosting Guide](./docker.md) - For local Docker setup
+- [Self-Hosting Guide](./self-hosting.md) - For local Docker setup
 

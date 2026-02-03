@@ -3,6 +3,16 @@ import type { Logger } from "@/utils/logger";
 
 export const INTERNAL_API_KEY_HEADER = "x-api-key";
 
+export function getInternalApiUrl(): string {
+  const url = env.INTERNAL_API_URL || env.NEXT_PUBLIC_BASE_URL;
+
+  if (!url.startsWith("http://") && !url.startsWith("https://")) {
+    return `https://${url}`;
+  }
+
+  return url;
+}
+
 export const isValidInternalApiKey = (
   headers: Headers,
   logger: Logger,

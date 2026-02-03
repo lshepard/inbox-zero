@@ -4,103 +4,46 @@ run-name: "Build Inbox Zero Docker Image"
 on:
   push:
     branches: ["main"]
-    paths-ignore:
-      - version.txt
+    tags: ["v*"] # Also build on version tags for releases
+  workflow_dispatch: # Allow manual trigger
 
 permissions:
-  contents: write # Needed to commit version bump and push tags
-  packages: write # Needed to push Docker image to GHCR
+  contents: read
+  packages: write
+  id-token: write
 
 env:
   DOCKER_IMAGE_REGISTRY: "ghcr.io"
   DOCKER_USERNAME: "elie222"
+  DEPOT_PROJECT_ID: "2s1sh2pjrf"
 
 jobs:
-  fetch-version:
-    if: github.repository == 'elie222/inbox-zero'
-    runs-on: ubuntu-latest
-
-    outputs:
-      version: ${{ steps.set_version.outputs.version }}
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4.1.1
-
-      - name: Force Pull Latest Code
-        run: |
-          git fetch origin main
-          git pull origin main
-
-      - name: Set version
-        id: set_version
-        run: |
-          version=$(cat version.txt)
-          echo "version=$version" >> $GITHUB_OUTPUT
-
-  update_version_txt:
-    if: github.repository == 'elie222/inbox-zero'
-    needs:
-      - fetch-version
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4.1.1
-        with:
-          ref: main
-          fetch-depth: 0
-
-      - name: Bump version on main branch
-        id: update_version
-        shell: bash
-        env:
-          FETCHED_BASE_VERSION: ${{ needs.fetch-version.outputs.version }}
-        run: |
-          set -x
-          BASE_VERSION="$FETCHED_BASE_VERSION"
-          IFS='.' read -r -a version_parts <<< "$BASE_VERSION"
-          for i in {0..2}; do
-            version_parts[$i]=${version_parts[$i]:-0}
-          done
-          version_parts[2]=$((version_parts[2] + 1))
-          new_version="${version_parts[0]}.${version_parts[1]}.${version_parts[2]}"
-          echo "new_version=${new_version}" >> $GITHUB_OUTPUT
-
-      - name: Commit updated version file
-        shell: bash
-        env:
-          VERSION: ${{ needs.fetch-version.outputs.version }}
-          NEW_VERSION: ${{ steps.update_version.outputs.new_version }}
-        run: |
-          echo "$NEW_VERSION" > version.txt
-          git config --local user.email "github-actions@getinboxzero.com"
-          git config --local user.name "github-actions"
-          git tag -a "$VERSION" -m "Release version $VERSION"
-          git commit -a -m "Bump version from $VERSION to $NEW_VERSION"
-          echo "Tagged version $VERSION. Updated version.txt to $NEW_VERSION on main." >> $GITHUB_STEP_SUMMARY
-
-      - name: Push changes
-        uses: ad-m/github-push-action@v0.8.0
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          branch: ${{ github.ref }}
-          force_with_lease: true
-          tags: true
-
   build-docker:
     if: github.repository == 'elie222/inbox-zero'
     name: "Build Docker Image"
     runs-on: ubuntu-latest
-    needs:
-      - fetch-version
-      - update_version_txt
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - name: Generate Docker tags
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            ghcr.io/${{ env.DOCKER_USERNAME }}/inbox-zero
+            ${{ env.DOCKER_USERNAME }}/inbox-zero
+          tags: |
+            # Always tag with short SHA
+            type=sha,prefix=
+            # Tag 'latest' on main branch
+            type=raw,value=latest,enable={{is_default_branch}}
+            # Tag with version on v* tags (e.g., v2.26.0)
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
 
       - name: Login to GHCR
         uses: docker/login-action@v3
@@ -109,19 +52,31 @@ jobs:
           username: ${{ env.DOCKER_USERNAME }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ env.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Set up Depot
+        uses: depot/setup-action@v1
 
       - name: Build and Push Docker Image
-        uses: docker/build-push-action@v4
+        uses: depot/build-push-action@v1
         with:
+          project: ${{ env.DEPOT_PROJECT_ID }}
           context: .
           file: docker/Dockerfile.prod
-          platforms: linux/amd64
+          platforms: linux/amd64,linux/arm64
           push: true
-          cache-from: type=gha
-          cache-to: type=gha, mode=max
-          tags: |
-            ghcr.io/${{ env.DOCKER_USERNAME }}/inbox-zero:latest
-            ghcr.io/${{ env.DOCKER_USERNAME }}/inbox-zero:${{ needs.fetch-version.outputs.version }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
 
+      - name: Update Docker Hub Description
+        uses: peter-evans/dockerhub-description@v4
+        with:
+          username: ${{ env.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          repository: ${{ env.DOCKER_USERNAME }}/inbox-zero
+          short-description: "Inbox Zero - AI email assistant for Gmail and Outlook to reach inbox zero fast"
+          readme-filepath: ./README.md

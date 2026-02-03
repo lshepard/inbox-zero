@@ -13,13 +13,10 @@ export const maxDuration = 300; // Applies to the actions
 
 export default async function AssistantPage({
   params,
-  searchParams,
 }: {
   params: Promise<{ emailAccountId: string }>;
-  searchParams: Promise<{ onboarding?: string }>;
 }) {
   const { emailAccountId } = await params;
-  const { onboarding } = await searchParams;
   await checkUserOwnsEmailAccount({ emailAccountId });
 
   // onboarding redirect
@@ -34,12 +31,7 @@ export default async function AssistantPage({
     });
 
     if (!hasRule) {
-      if (onboarding === "true") {
-        // If already on onboarding URL, redirect to onboarding flow
-        redirect(prefixPath(emailAccountId, "/assistant/onboarding"));
-      } else {
-        redirect(prefixPath(emailAccountId, "/assistant?onboarding=true"));
-      }
+      redirect(prefixPath(emailAccountId, "/assistant?onboarding=true"));
     }
   }
 
@@ -48,8 +40,8 @@ export default async function AssistantPage({
       <Suspense>
         <PermissionsCheck />
 
-        <div className="flex h-[100dvh] flex-col md:h-[calc(100vh-theme(spacing.16))]">
-          <Chat />
+        <div className="flex h-[calc(100vh-theme(spacing.16))] flex-col">
+          <Chat open />
         </div>
       </Suspense>
     </EmailProvider>

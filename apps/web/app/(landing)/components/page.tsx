@@ -1,10 +1,19 @@
 "use client";
 
 import { SparklesIcon } from "lucide-react";
-import { CardBasic } from "@/components/ui/card";
+import {
+  Card,
+  CardBasic,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Container } from "@/components/Container";
 import {
   PageHeading,
+  PageSubHeading,
   SectionDescription,
   SectionHeader,
   MessageText,
@@ -12,11 +21,14 @@ import {
   TypographyH3,
   TypographyH4,
   TextLink,
+  MutedText,
 } from "@/components/Typography";
 import { Button } from "@/components/Button";
 import { Button as ShadButton } from "@/components/ui/button";
 import { Badge } from "@/components/Badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Table, TableBody, TableRow, TableCell } from "@/components/ui/table";
+import { ActionCard } from "@/components/ui/card";
 import { AlertBasic } from "@/components/Alert";
 import { Notice } from "@/components/Notice";
 import { TestErrorButton } from "@/app/(landing)/components/TestError";
@@ -39,6 +51,10 @@ import {
   ResultsDisplay,
   ResultDisplayContent,
 } from "@/app/(app)/[emailAccountId]/assistant/ResultDisplay";
+import {
+  ActivityLog,
+  type ActivityLogEntry,
+} from "@/app/(app)/[emailAccountId]/assistant/BulkProcessActivityLog";
 
 export const maxDuration = 3;
 
@@ -58,15 +74,82 @@ export default function Components() {
           <TypographyH3>TypographyH3</TypographyH3>
           <TypographyH4>TypographyH4</TypographyH4>
           <SectionHeader>SectionHeader</SectionHeader>
+          <PageSubHeading>PageSubHeading</PageSubHeading>
           <SectionDescription>SectionDescription</SectionDescription>
           <MessageText>MessageText</MessageText>
           <TypographyP>TypographyP</TypographyP>
+          <MutedText>MutedText</MutedText>
           <TextLink href="#">TextLink</TextLink>
         </div>
 
         <div className="space-y-6">
           <div className="underline">Card</div>
           <CardBasic>This is a basic card.</CardBasic>
+
+          <div className="grid gap-6 md:grid-cols-2">
+            <Card>
+              <CardHeader>
+                <CardTitle>Default Card</CardTitle>
+                <CardDescription>
+                  This card uses the default size.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <p>
+                  The default card has larger padding and text for better
+                  readability in standard layouts.
+                </p>
+              </CardContent>
+              <CardFooter>
+                <ShadButton variant="outline" className="w-full">
+                  Action
+                </ShadButton>
+              </CardFooter>
+            </Card>
+
+            <Card size="sm">
+              <CardHeader>
+                <CardTitle>Small Card</CardTitle>
+                <CardDescription>
+                  This card uses the small size variant.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <p>
+                  The card component supports a size prop that can be set to
+                  &quot;sm&quot; for a more compact appearance.
+                </p>
+              </CardContent>
+              <CardFooter>
+                <ShadButton variant="outline" size="sm" className="w-full">
+                  Action
+                </ShadButton>
+              </CardFooter>
+            </Card>
+          </div>
+
+          <div className="space-y-4">
+            <ActionCard
+              icon={<SparklesIcon className="size-5" />}
+              title="Action Card (Green)"
+              description="This is the default green variant of the ActionCard component."
+              action={<ShadButton variant="primaryBlack">Click Me</ShadButton>}
+            />
+            <ActionCard
+              variant="blue"
+              icon={<SparklesIcon className="size-5" />}
+              title="Action Card (Blue)"
+              description="This is the blue variant of the ActionCard component."
+              action={<ShadButton variant="primaryBlack">Click Me</ShadButton>}
+            />
+            <ActionCard
+              variant="destructive"
+              icon={<SparklesIcon className="size-5" />}
+              title="Action Card (Destructive)"
+              description="This is the destructive variant of the ActionCard component."
+              action={<ShadButton variant="primaryBlack">Click Me</ShadButton>}
+            />
+          </div>
         </div>
 
         <div className="space-y-6">
@@ -202,27 +285,23 @@ export default function Components() {
           <div className="underline">Premium Alerts</div>
           <div className="mt-4 space-y-4">
             <div>
-              <p className="mb-2 text-sm text-muted-foreground">
+              <MutedText className="mb-2">
                 Basic Plan (needs upgrade to Business):
-              </p>
+              </MutedText>
               <PremiumAiAssistantAlert
                 showSetApiKey={false}
                 tier={"BASIC_MONTHLY"}
               />
             </div>
             <div>
-              <p className="mb-2 text-sm text-muted-foreground">
-                Pro Plan (needs API key):
-              </p>
+              <MutedText className="mb-2">Pro Plan (needs API key):</MutedText>
               <PremiumAiAssistantAlert
                 showSetApiKey={true}
                 tier={"PRO_MONTHLY"}
               />
             </div>
             <div>
-              <p className="mb-2 text-sm text-muted-foreground">
-                Free Plan (needs upgrade):
-              </p>
+              <MutedText className="mb-2">Free Plan (needs upgrade):</MutedText>
               <PremiumAiAssistantAlert showSetApiKey={false} tier={null} />
             </div>
           </div>
@@ -330,6 +409,11 @@ export default function Components() {
                   label: "Digest",
                   id: "digest",
                 },
+                {
+                  type: ActionType.NOTIFY_SENDER,
+                  label: "Notify sender",
+                  id: "notify_sender",
+                },
               ]}
               provider="gmail"
               labels={[{ id: "label", name: "Label" }]}
@@ -359,9 +443,9 @@ export default function Components() {
             />
 
             <div className="mt-8">
-              <p className="mb-2 text-sm text-muted-foreground">
+              <MutedText className="mb-2">
                 Complex example with multiple batches:
-              </p>
+              </MutedText>
               <ResultsDisplay
                 results={[
                   // Batch 1 (most recent): 2 rules
@@ -549,6 +633,72 @@ export default function Components() {
         </div>
 
         <div>
+          <div className="underline">ActivityLog</div>
+          <div className="mt-4 space-y-4">
+            <MutedText>Default with mixed states:</MutedText>
+            <ActivityLog
+              entries={getActivityLogEntries()}
+              processingCount={2}
+            />
+
+            <MutedText>Paused state:</MutedText>
+            <ActivityLog
+              entries={getActivityLogEntries()}
+              processingCount={2}
+              paused={true}
+            />
+
+            <MutedText>Long text truncation test:</MutedText>
+            <ActivityLog
+              entries={[
+                {
+                  id: "long-1",
+                  from: '"Very Long Sender Name That Should Definitely Be Truncated" <extremely-long-email-address-that-goes-on-forever@really-long-domain-name.com>',
+                  subject:
+                    "This is an extremely long subject line that should definitely truncate properly when displayed in the activity log component - it just keeps going and going with more text",
+                  status: "completed",
+                  ruleName: "Newsletter",
+                },
+                {
+                  id: "long-2",
+                  from: "Short <short@test.com>",
+                  subject: "Short subject",
+                  status: "processing",
+                },
+              ]}
+              processingCount={1}
+            />
+
+            <MutedText>All completed:</MutedText>
+            <ActivityLog
+              entries={[
+                {
+                  id: "done-1",
+                  from: "Alice <alice@example.com>",
+                  subject: "Meeting notes",
+                  status: "completed",
+                  ruleName: "Work",
+                },
+                {
+                  id: "done-2",
+                  from: "Bob <bob@example.com>",
+                  subject: "Project update",
+                  status: "completed",
+                  ruleName: "FYI",
+                },
+                {
+                  id: "done-3",
+                  from: "Newsletter <news@company.com>",
+                  subject: "Weekly digest",
+                  status: "completed",
+                },
+              ]}
+              processingCount={0}
+            />
+          </div>
+        </div>
+
+        <div>
           <div className="underline">MultiSelectFilter</div>
           <div className="mt-4">
             <MultiSelectFilter
@@ -598,9 +748,7 @@ export default function Components() {
           <div className="underline">Premium Expired Banners</div>
           <div className="mt-4 space-y-4">
             <div>
-              <p className="mb-2 text-sm text-muted-foreground">
-                Stripe Past Due:
-              </p>
+              <MutedText className="mb-2">Stripe Past Due:</MutedText>
               <PremiumExpiredCardContent
                 premium={{
                   lemonSqueezyRenewsAt: null,
@@ -612,9 +760,7 @@ export default function Components() {
               />
             </div>
             <div>
-              <p className="mb-2 text-sm text-muted-foreground">
-                Stripe Canceled:
-              </p>
+              <MutedText className="mb-2">Stripe Canceled:</MutedText>
               <PremiumExpiredCardContent
                 premium={{
                   lemonSqueezyRenewsAt: null,
@@ -626,9 +772,7 @@ export default function Components() {
               />
             </div>
             <div>
-              <p className="mb-2 text-sm text-muted-foreground">
-                LemonSqueezy Expired:
-              </p>
+              <MutedText className="mb-2">LemonSqueezy Expired:</MutedText>
               <PremiumExpiredCardContent
                 premium={{
                   lemonSqueezyRenewsAt: new Date(
@@ -642,9 +786,9 @@ export default function Components() {
               />
             </div>
             <div>
-              <p className="mb-2 text-sm text-muted-foreground">
+              <MutedText className="mb-2">
                 No Banner (Active Premium):
-              </p>
+              </MutedText>
               <div className="min-h-[20px] text-xs text-muted-foreground">
                 <PremiumExpiredCardContent
                   premium={{
@@ -659,14 +803,21 @@ export default function Components() {
               </div>
             </div>
             <div>
-              <p className="mb-2 text-sm text-muted-foreground">
+              <MutedText className="mb-2">
                 No Banner (Never Had Premium):
-              </p>
+              </MutedText>
               <div className="min-h-[20px] text-xs text-muted-foreground">
                 <PremiumExpiredCardContent premium={null} />
                 Banner should not appear for users who never had premium
               </div>
             </div>
+          </div>
+        </div>
+
+        <div>
+          <div className="underline">Email Row Truncation</div>
+          <div className="mt-4">
+            <EmailRowExample />
           </div>
         </div>
 
@@ -708,4 +859,78 @@ function getRuleWithName(name: string): Rule {
     id: name.toLowerCase().replace(/\s+/g, "-"),
     name,
   };
+}
+
+function getActivityLogEntries(): ActivityLogEntry[] {
+  return [
+    {
+      id: "1",
+      from: "Lenny's Newsletter <lenny@substack.com>",
+      subject: "How Zapier's EA built an army of AI interns",
+      status: "completed",
+      ruleName: "Newsletter",
+    },
+    {
+      id: "2",
+      from: "ZenDaily <zendaily@substack.com>",
+      subject: "🔮 ZenDaily - 15th Dec 2025 🔮",
+      status: "processing",
+      ruleName: "Newsletter",
+    },
+    {
+      id: "3",
+      from: "Elie Steinbock <elie@getinboxzero.com>",
+      subject: "talk tomorrow",
+      status: "processing",
+    },
+    {
+      id: "4",
+      from: "Morning Brew <crew@morningbrew.com>",
+      subject: "☕ Gathering storm",
+      status: "waiting",
+    },
+    {
+      id: "5",
+      from: "GitHub <notifications@github.com>",
+      subject: "PR review requested",
+      status: "completed",
+      ruleName: "To Review",
+    },
+  ];
+}
+
+function EmailRowExample() {
+  return (
+    <div className="border rounded-md overflow-hidden">
+      <Table>
+        <TableBody>
+          <TableRow>
+            <TableCell>
+              <div className="flex items-center justify-between gap-4">
+                <div className="min-w-0 flex-1">
+                  <MessageText className="flex items-center">
+                    <span className="max-w-[300px] truncate">
+                      Extremely Long Sender Name That Should Definitely Be
+                      Truncated
+                    </span>
+                  </MessageText>
+                  <MessageText className="mt-1 truncate font-bold">
+                    This is an extremely long subject line that used to cause
+                    the table to grow horizontally
+                  </MessageText>
+                  <MessageText className="mt-1 line-clamp-2 break-all">
+                    This snippet contains a very long URL that does not break:
+                    https://www.this-is-a-very-long-url-that-goes-on-and-on-and-on-and-on-and-on-and-on-and-on-and-on-and-on-and-on.com/test
+                  </MessageText>
+                </div>
+                <div className="ml-4 shrink-0">
+                  <ShadButton size="sm">Test</ShadButton>
+                </div>
+              </div>
+            </TableCell>
+          </TableRow>
+        </TableBody>
+      </Table>
+    </div>
+  );
 }

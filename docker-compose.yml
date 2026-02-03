@@ -3,7 +3,7 @@ services:
   db:
     image: postgres:16
     restart: always
-    container_name: inbox-zero
+    # container_name: inbox-zero
     environment:
       - POSTGRES_USER=${POSTGRES_USER:-postgres}
       - POSTGRES_DB=${POSTGRES_DB:-inboxzero}
@@ -55,12 +55,7 @@ services:
 
   web:
     image: ghcr.io/elie222/inbox-zero:latest
-    pull_policy: if_not_present
-    # The pre-built image will be used by default. For local development,
-    # use 'docker compose build web' to build from source instead.
-    build:
-      context: .
-      dockerfile: ./docker/Dockerfile.prod
+    pull_policy: always
     env_file:
       - ./apps/web/.env
     depends_on:
@@ -76,10 +71,55 @@ services:
       - inbox-zero-network
     environment:
       NEXT_PUBLIC_BASE_URL: ${NEXT_PUBLIC_BASE_URL:-http://localhost:3000}
+      NEXT_PUBLIC_BYPASS_PREMIUM_CHECKS: ${NEXT_PUBLIC_BYPASS_PREMIUM_CHECKS:-true}
+      NEXT_PUBLIC_EMAIL_SEND_ENABLED: ${NEXT_PUBLIC_EMAIL_SEND_ENABLED:-true}
       DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-password}@db:5432/${POSTGRES_DB:-inboxzero}?schema=public}
       DIRECT_URL: ${DIRECT_URL:-postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-password}@db:5432/${POSTGRES_DB:-inboxzero}?schema=public}
       UPSTASH_REDIS_URL: ${UPSTASH_REDIS_URL:-http://serverless-redis-http:80}
-      UPSTASH_REDIS_TOKEN: "${UPSTASH_REDIS_TOKEN}"
+      INTERNAL_API_URL: ${INTERNAL_API_URL:-http://web:3000}
+    restart: always
+
+  cron:
+    image: alpine:latest
+    command: >
+      sh -c "
+        apk add --no-cache curl &&
+        FOLLOW_UP_INTERVAL=1800 &&
+        MEETING_BRIEFS_INTERVAL=900 &&
+        WATCH_INTERVAL=21600 &&
+        LAST_MEETING_BRIEFS=0 &&
+        LAST_WATCH=0 &&
+        while true; do
+          NOW=$$(date +%s)
+
+          # Follow-up reminders: every 30 minutes
+          echo \"[cron] Processing follow-up reminders...\"
+          curl -s -X GET 'http://web:3000/api/follow-up-reminders' -H \"Authorization: Bearer $${CRON_SECRET}\" || echo \"[cron] Warning: follow-up-reminders request failed\"
+
+          # Meeting briefs: every 15 minutes
+          if [ $$((NOW - LAST_MEETING_BRIEFS)) -ge $$MEETING_BRIEFS_INTERVAL ]; then
+            echo \"[cron] Processing meeting briefs...\"
+            curl -s -X GET 'http://web:3000/api/meeting-briefs' -H \"Authorization: Bearer $${CRON_SECRET}\" || echo \"[cron] Warning: meeting-briefs request failed\"
+            LAST_MEETING_BRIEFS=$$NOW
+          fi
+
+          # Email watch renewal: every 6 hours
+          if [ $$((NOW - LAST_WATCH)) -ge $$WATCH_INTERVAL ]; then
+            echo \"[cron] Renewing email watches...\"
+            curl -s -X GET 'http://web:3000/api/watch/all' -H \"Authorization: Bearer $${CRON_SECRET}\" || echo \"[cron] Warning: watch request failed\"
+            LAST_WATCH=$$NOW
+          fi
+
+          echo \"[cron] Sleeping for 30 minutes...\"
+          sleep $$FOLLOW_UP_INTERVAL
+        done
+      "
+    env_file:
+      - ./apps/web/.env
+    depends_on:
+      - web
+    networks:
+      - inbox-zero-network
     restart: always
 
 volumes:

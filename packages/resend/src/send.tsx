@@ -10,6 +10,22 @@ import DigestEmail, {
 import InvitationEmail, {
   type InvitationEmailProps,
 } from "../emails/invitation";
+import ReconnectionEmail, {
+  type ReconnectionEmailProps,
+} from "../emails/reconnection";
+import ActionRequiredEmail, {
+  type ActionRequiredEmailProps,
+} from "../emails/action-required";
+import MeetingBriefingEmail, {
+  type MeetingBriefingEmailProps,
+  generateMeetingBriefingSubject,
+} from "../emails/meeting-briefing";
+import ColdEmailNotification, {
+  type ColdEmailNotificationProps,
+} from "../emails/cold-email-notification";
+
+const RESEND_NOT_CONFIGURED_MESSAGE =
+  "Resend is not configured. You need to add a RESEND_API_KEY in your .env file for emails to work.";
 
 const sendEmail = async ({
   from,
@@ -19,6 +35,7 @@ const sendEmail = async ({
   test,
   tags,
   unsubscribeToken,
+  baseUrl,
 }: {
   from: string;
   to: string;
@@ -28,11 +45,10 @@ const sendEmail = async ({
   entityRefId?: string;
   tags?: { name: string; value: string }[];
   unsubscribeToken: string;
+  baseUrl: string;
 }) => {
   if (!resend) {
-    console.log(
-      "Resend is not configured. You need to add a RESEND_API_KEY in your .env file for emails to work.",
-    );
+    console.log(RESEND_NOT_CONFIGURED_MESSAGE);
     return Promise.resolve();
   }
 
@@ -45,7 +61,7 @@ const sendEmail = async ({
     react,
     text,
     headers: {
-      "List-Unsubscribe": `<https://www.getinboxzero.com/api/unsubscribe?token=${unsubscribeToken}>`,
+      "List-Unsubscribe": `<${baseUrl}/api/unsubscribe?token=${unsubscribeToken}>`,
       // From Feb 2024 Google requires this for bulk senders
       "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
       // Prevent threading on Gmail
@@ -105,6 +121,7 @@ export const sendSummaryEmail = async ({
     react: <SummaryEmail {...emailProps} />,
     test,
     unsubscribeToken: emailProps.unsubscribeToken,
+    baseUrl: emailProps.baseUrl,
     tags: [
       {
         name: "category",
@@ -132,6 +149,7 @@ export const sendDigestEmail = async ({
     react: <DigestEmail {...emailProps} />,
     test,
     unsubscribeToken: emailProps.unsubscribeToken,
+    baseUrl: emailProps.baseUrl,
     tags: [
       {
         name: "category",
@@ -159,6 +177,7 @@ export const sendInvitationEmail = async ({
     react: <InvitationEmail {...emailProps} />,
     test,
     unsubscribeToken: emailProps.unsubscribeToken,
+    baseUrl: emailProps.baseUrl,
     tags: [
       {
         name: "category",
@@ -166,4 +185,145 @@ export const sendInvitationEmail = async ({
       },
     ],
   });
+};
+
+export const sendReconnectionEmail = async ({
+  from,
+  to,
+  test,
+  emailProps,
+}: {
+  from: string;
+  to: string;
+  test?: boolean;
+  emailProps: ReconnectionEmailProps;
+}) => {
+  return sendEmail({
+    from,
+    to,
+    subject: `Reconnect your email account: ${emailProps.email}`,
+    react: <ReconnectionEmail {...emailProps} />,
+    test,
+    unsubscribeToken: emailProps.unsubscribeToken,
+    baseUrl: emailProps.baseUrl,
+    tags: [
+      {
+        name: "category",
+        value: "reconnection",
+      },
+    ],
+  });
+};
+
+export const sendActionRequiredEmail = async ({
+  from,
+  to,
+  test,
+  emailProps,
+}: {
+  from: string;
+  to: string;
+  test?: boolean;
+  emailProps: ActionRequiredEmailProps;
+}) => {
+  return sendEmail({
+    from,
+    to,
+    subject: `Action Required: ${emailProps.errorType}`,
+    react: <ActionRequiredEmail {...emailProps} />,
+    test,
+    unsubscribeToken: emailProps.unsubscribeToken,
+    baseUrl: emailProps.baseUrl,
+    tags: [
+      {
+        name: "category",
+        value: "action-required",
+      },
+    ],
+  });
+};
+
+export const sendMeetingBriefingEmail = async ({
+  from,
+  to,
+  test,
+  emailProps,
+}: {
+  from: string;
+  to: string;
+  test?: boolean;
+  emailProps: MeetingBriefingEmailProps;
+}) => {
+  return sendEmail({
+    from,
+    to,
+    subject: generateMeetingBriefingSubject(emailProps),
+    react: <MeetingBriefingEmail {...emailProps} />,
+    test,
+    unsubscribeToken: emailProps.unsubscribeToken,
+    baseUrl: emailProps.baseUrl,
+    tags: [
+      {
+        name: "category",
+        value: "meeting-briefing",
+      },
+    ],
+  });
+};
+
+/**
+ * Send a notification to a cold emailer informing them their email was filtered.
+ * This is different from other emails - it goes to an external sender, not our user,
+ * so it doesn't have an unsubscribe token.
+ */
+export const sendColdEmailNotification = async ({
+  from,
+  to,
+  replyTo,
+  subject,
+  inReplyTo,
+  emailProps,
+}: {
+  from: string;
+  to: string; // The cold emailer we're notifying
+  replyTo: string; // The user who received the cold email
+  subject: string;
+  inReplyTo?: string; // Message-ID of original email for threading
+  emailProps: ColdEmailNotificationProps;
+}) => {
+  if (!resend) {
+    console.log(RESEND_NOT_CONFIGURED_MESSAGE);
+    return { data: null, error: null };
+  }
+
+  const react = <ColdEmailNotification {...emailProps} />;
+  const text = await render(react, { plainText: true });
+
+  const result = await resend.emails.send({
+    from,
+    to,
+    replyTo,
+    subject,
+    react,
+    text,
+    // Threading headers - In-Reply-To and References make the reply appear in the same thread
+    headers: inReplyTo
+      ? { "In-Reply-To": inReplyTo, References: inReplyTo }
+      : undefined,
+    tags: [
+      {
+        name: "category",
+        value: "cold-email-notification",
+      },
+    ],
+  });
+
+  if (result.error) {
+    console.error("Error sending cold email notification", result.error);
+    throw new Error(
+      `Error sending cold email notification: ${result.error.message}`,
+    );
+  }
+
+  return result;
 };

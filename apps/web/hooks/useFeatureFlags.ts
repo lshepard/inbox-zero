@@ -2,9 +2,32 @@ import {
   useFeatureFlagEnabled,
   useFeatureFlagVariantKey,
 } from "posthog-js/react";
+import { env } from "@/env";
 
 export function useCleanerEnabled() {
-  return useFeatureFlagEnabled("inbox-cleaner");
+  const posthogEnabled = useFeatureFlagEnabled("inbox-cleaner");
+  return env.NEXT_PUBLIC_CLEANER_ENABLED || posthogEnabled;
+}
+
+export function useFollowUpRemindersEnabled() {
+  return (
+    useFeatureFlagEnabled("follow-up-reminders") ||
+    env.NEXT_PUBLIC_FOLLOW_UP_REMINDERS_ENABLED
+  );
+}
+
+export function useMeetingBriefsEnabled() {
+  return env.NEXT_PUBLIC_MEETING_BRIEFS_ENABLED;
+}
+
+export function useIntegrationsEnabled() {
+  const posthogEnabled = useFeatureFlagEnabled("integrations");
+  return posthogEnabled || env.NEXT_PUBLIC_INTEGRATIONS_ENABLED;
+}
+
+export function useSmartFilingEnabled() {
+  const posthogEnabled = useFeatureFlagEnabled("smart-filing");
+  return posthogEnabled || env.NEXT_PUBLIC_SMART_FILING_ENABLED;
 }
 
 const HERO_FLAG_NAME = "hero-copy-7";

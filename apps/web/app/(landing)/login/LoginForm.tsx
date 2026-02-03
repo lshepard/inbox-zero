@@ -16,35 +16,54 @@ import {
 } from "@/components/ui/dialog";
 import { signIn } from "@/utils/auth-client";
 import { WELCOME_PATH } from "@/utils/config";
+import { toastError } from "@/components/Toast";
+import { isInternalPath } from "@/utils/path";
 
 export function LoginForm() {
   const searchParams = useSearchParams();
   const next = searchParams?.get("next");
-  const error = searchParams?.get("error");
 
   const [loadingGoogle, setLoadingGoogle] = useState(false);
   const [loadingMicrosoft, setLoadingMicrosoft] = useState(false);
 
   const handleGoogleSignIn = async () => {
     setLoadingGoogle(true);
-    await signIn.social({
-      provider: "google",
-      errorCallbackURL: "/login/error",
-      callbackURL: next && next.length > 0 ? next : WELCOME_PATH,
-      ...(error === "RequiresReconsent" ? { consent: true } : {}),
-    });
-    setLoadingGoogle(false);
+    const callbackURL = next && isInternalPath(next) ? next : WELCOME_PATH;
+    try {
+      await signIn.social({
+        provider: "google",
+        errorCallbackURL: "/login/error",
+        callbackURL,
+      });
+    } catch (error) {
+      console.error("Error signing in with Google:", error);
+      toastError({
+        title: "Error signing in with Google",
+        description: "Please try again or contact support",
+      });
+    } finally {
+      setLoadingGoogle(false);
+    }
   };
 
   const handleMicrosoftSignIn = async () => {
     setLoadingMicrosoft(true);
-    await signIn.social({
-      provider: "microsoft",
-      errorCallbackURL: "/login/error",
-      callbackURL: next && next.length > 0 ? next : WELCOME_PATH,
-      ...(error === "RequiresReconsent" ? { consent: true } : {}),
-    });
-    setLoadingMicrosoft(false);
+    const callbackURL = next && isInternalPath(next) ? next : WELCOME_PATH;
+    try {
+      await signIn.social({
+        provider: "microsoft",
+        errorCallbackURL: "/login/error",
+        callbackURL,
+      });
+    } catch (error) {
+      console.error("Error signing in with Microsoft:", error);
+      toastError({
+        title: "Error signing in with Microsoft",
+        description: "Please try again or contact support",
+      });
+    } finally {
+      setLoadingMicrosoft(false);
+    }
   };
 
   return (

@@ -5,11 +5,16 @@ import type { SendEmailBody } from "@/utils/gmail/mail";
 import type { ParsedMessage } from "@/utils/types";
 import type { EmailForAction } from "@/utils/ai/types";
 import { createOutlookReplyContent } from "@/utils/outlook/reply";
+import { escapeHtml } from "@/utils/string";
 import { forwardEmailHtml, forwardEmailSubject } from "@/utils/gmail/forward";
-import { buildReplyAllRecipients } from "@/utils/email/reply-all";
+import {
+  buildReplyAllRecipients,
+  mergeAndDedupeRecipients,
+} from "@/utils/email/reply-all";
 import { withOutlookRetry } from "@/utils/outlook/retry";
 import { extractEmailAddress, extractNameFromEmail } from "@/utils/email";
 import { ensureEmailSendingEnabled } from "@/utils/mail";
+import type { Logger } from "@/utils/logger";
 
 interface OutlookMessageRequest {
   subject: string;
@@ -21,16 +26,24 @@ interface OutlookMessageRequest {
   ccRecipients?: { emailAddress: { address: string } }[];
   bccRecipients?: { emailAddress: { address: string } }[];
   replyTo?: { emailAddress: { address: string } }[];
-  conversationId?: string;
-  isDraft?: boolean;
 }
+
+type SentEmailResult = Pick<Message, "id" | "conversationId">;
 
 export async function sendEmailWithHtml(
   client: OutlookClient,
   body: SendEmailBody,
-) {
+  logger: Logger,
+): Promise<SentEmailResult> {
   ensureEmailSendingEnabled();
 
+  // For replies with a message ID, use createReply for proper threading
+  // Microsoft Graph's sendMail doesn't support In-Reply-To/References headers
+  if (body.replyToEmail?.messageId) {
+    return sendReplyUsingCreateReply(client, body, logger);
+  }
+
+  // For new emails (no reply context), use sendMail
   const message: OutlookMessageRequest = {
     subject: body.subject,
     body: {
@@ -49,61 +62,79 @@ export async function sendEmailWithHtml(
       : {}),
   };
 
-  if (body.replyToEmail?.threadId) {
-    message.conversationId = body.replyToEmail.threadId;
-  }
-
-  const result: Message = await withOutlookRetry(() =>
-    client.getClient().api("/me/messages").post(message),
+  await withOutlookRetry(
+    () =>
+      client.getClient().api("/me/sendMail").post({
+        message,
+        saveToSentItems: true,
+      }),
+    logger,
   );
-  return result;
+
+  // sendMail returns 202 with no body, so we can't get the sent message ID
+  return {
+    id: "",
+    conversationId: body.replyToEmail?.threadId,
+  };
 }
 
 export async function sendEmailWithPlainText(
   client: OutlookClient,
   body: Omit<SendEmailBody, "messageHtml"> & { messageText: string },
+  logger: Logger,
 ) {
   const messageHtml = convertTextToHtmlParagraphs(body.messageText);
-  return sendEmailWithHtml(client, { ...body, messageHtml });
+  return sendEmailWithHtml(client, { ...body, messageHtml }, logger);
 }
 
 export async function replyToEmail(
   client: OutlookClient,
   message: EmailForAction,
   reply: string,
+  logger: Logger,
 ) {
+  ensureEmailSendingEnabled();
+
   const { html } = createOutlookReplyContent({
     textContent: reply,
     message,
   });
 
-  // Only replying to the original sender
-  const replyMessage = {
-    subject: `Re: ${message.headers.subject}`,
-    body: {
-      contentType: "html",
-      content: html,
-    },
-    toRecipients: [
-      {
-        emailAddress: {
-          address: message.headers["reply-to"] || message.headers.from,
-        },
-      },
-    ],
-    conversationId: message.threadId,
-  };
-
-  ensureEmailSendingEnabled();
-
-  // Send the email immediately using the sendMail endpoint
-  const result = await withOutlookRetry(() =>
-    client.getClient().api("/me/sendMail").post({
-      message: replyMessage,
-      saveToSentItems: true,
-    }),
+  // Use createReply to create a properly threaded draft
+  // Microsoft Graph's sendMail doesn't support setting In-Reply-To/References headers
+  // Only createReply/createReplyAll endpoints ensure proper threading
+  const replyDraft: Message = await withOutlookRetry(
+    () =>
+      client.getClient().api(`/me/messages/${message.id}/createReply`).post({}),
+    logger,
   );
-  return result;
+
+  // Update the draft with our content
+  await withOutlookRetry(
+    () =>
+      client
+        .getClient()
+        .api(`/me/messages/${replyDraft.id}`)
+        .patch({
+          body: {
+            contentType: "html",
+            content: html,
+          },
+        }),
+    logger,
+  );
+
+  // Send the draft
+  await withOutlookRetry(
+    () => client.getClient().api(`/me/messages/${replyDraft.id}/send`).post({}),
+    logger,
+  );
+
+  // Draft ID is no longer valid after /send; Graph doesn't return sent message ID
+  return {
+    id: "",
+    conversationId: replyDraft.conversationId,
+  };
 }
 
 export async function forwardEmail(
@@ -115,14 +146,16 @@ export async function forwardEmail(
     bcc?: string;
     content?: string;
   },
+  logger: Logger,
 ) {
   ensureEmailSendingEnabled();
 
   if (!options.to.trim()) throw new Error("Recipient address is required");
 
   // Get the original message
-  const originalMessage: Message = await withOutlookRetry(() =>
-    client.getClient().api(`/me/messages/${options.messageId}`).get(),
+  const originalMessage: Message = await withOutlookRetry(
+    () => client.getClient().api(`/me/messages/${options.messageId}`).get(),
+    logger,
   );
 
   const message: ParsedMessage = {
@@ -160,11 +193,13 @@ export async function forwardEmail(
     },
   };
 
-  const result = await withOutlookRetry(() =>
-    client
-      .getClient()
-      .api(`/me/messages/${options.messageId}/forward`)
-      .post({ message: forwardMessage }),
+  const result = await withOutlookRetry(
+    () =>
+      client
+        .getClient()
+        .api(`/me/messages/${options.messageId}/forward`)
+        .post({ message: forwardMessage }),
+    logger,
   );
 
   return result;
@@ -177,9 +212,12 @@ export async function draftEmail(
     to?: string;
     subject?: string;
     content: string;
+    cc?: string;
+    bcc?: string;
     attachments?: Attachment[];
   },
   userEmail: string,
+  logger: Logger,
 ) {
   const { html } = createOutlookReplyContent({
     textContent: args.content,
@@ -200,21 +238,48 @@ export async function draftEmail(
     },
   };
 
+  // Build CC list from reply-all and args
+  const ccAddresses = mergeAndDedupeRecipients(recipients.cc, args.cc);
+
   // Convert CC addresses to Outlook format
-  const ccRecipients = recipients.cc.map((addr) => ({
+  const ccRecipients = ccAddresses.map((addr) => ({
     emailAddress: {
       address: extractEmailAddress(addr),
       name: extractNameFromEmail(addr),
     },
   }));
 
+  // Handle BCC if provided
+  const bccAddresses = mergeAndDedupeRecipients([], args.bcc);
+  const bccRecipients = bccAddresses.map((addr) => ({
+    emailAddress: {
+      address: extractEmailAddress(addr),
+      name: extractNameFromEmail(addr),
+    },
+  }));
+
+  // Get the original message's isRead status before creating the draft
+  // Microsoft Graph's createReplyAll automatically marks the original as read
+  const originalMessage: Message = await withOutlookRetry(
+    () =>
+      client
+        .getClient()
+        .api(`/me/messages/${originalEmail.id}`)
+        .select("isRead")
+        .get(),
+    logger,
+  );
+  const wasUnread = originalMessage.isRead === false;
+
   // Use createReplyAll endpoint to create a proper reply draft
   // This ensures the draft is linked to the original message as a reply all
-  const replyDraft: Message = await withOutlookRetry(() =>
-    client
-      .getClient()
-      .api(`/me/messages/${originalEmail.id}/createReplyAll`)
-      .post({}),
+  const replyDraft: Message = await withOutlookRetry(
+    () =>
+      client
+        .getClient()
+        .api(`/me/messages/${originalEmail.id}/createReplyAll`)
+        .post({}),
+    logger,
   );
 
   // Update the draft with our content
@@ -226,17 +291,33 @@ export async function draftEmail(
     updateRequest.header("If-Match", etag);
   }
 
-  const updatedDraft: Message = await withOutlookRetry(() =>
-    updateRequest.patch({
-      subject: args.subject || originalEmail.headers.subject,
-      body: {
-        contentType: "html",
-        content: html,
-      },
-      toRecipients: [toRecipient],
-      ...(ccRecipients.length > 0 ? { ccRecipients } : {}),
-    }),
+  const updatedDraft: Message = await withOutlookRetry(
+    () =>
+      updateRequest.patch({
+        subject: args.subject || originalEmail.headers.subject,
+        body: {
+          contentType: "html",
+          content: html,
+        },
+        toRecipients: [toRecipient],
+        ...(ccRecipients.length > 0 ? { ccRecipients } : {}),
+        ...(bccRecipients.length > 0 ? { bccRecipients } : {}),
+      }),
+    logger,
   );
+
+  // Restore the original message's unread status if it was unread before
+  // createReplyAll automatically marks the original message as read
+  if (wasUnread) {
+    await withOutlookRetry(
+      () =>
+        client
+          .getClient()
+          .api(`/me/messages/${originalEmail.id}`)
+          .patch({ isRead: false }),
+      logger,
+    );
+  }
 
   // Use the original replyDraft.id since that's the stable ID
   // The PATCH response might not always include the full object?
@@ -252,9 +333,68 @@ function convertTextToHtmlParagraphs(text?: string | null): string {
     .filter((paragraph) => paragraph.trim() !== "");
 
   // Wrap each paragraph with <p> tags and join them back together
+  // Escape HTML to prevent prompt injection attacks
   const htmlContent = paragraphs
-    .map((paragraph) => `<p>${paragraph.trim()}</p>`)
+    .map((paragraph) => `<p>${escapeHtml(paragraph.trim())}</p>`)
     .join("");
 
   return `<html><body>${htmlContent}</body></html>`;
+}
+
+async function sendReplyUsingCreateReply(
+  client: OutlookClient,
+  body: SendEmailBody,
+  logger: Logger,
+): Promise<SentEmailResult> {
+  const originalMessageId = body.replyToEmail!.messageId!;
+
+  // Use createReply to create a properly threaded draft
+  // Microsoft Graph's createReply automatically sets In-Reply-To and References headers
+  // based on the original message, ensuring proper threading across email providers
+  const replyDraft: Message = await withOutlookRetry(
+    () =>
+      client
+        .getClient()
+        .api(`/me/messages/${originalMessageId}/createReply`)
+        .post({}),
+    logger,
+  );
+
+  // Update the draft with our content and recipients
+  // Note: We cannot set In-Reply-To/References headers via internetMessageHeaders
+  // as Microsoft Graph only allows custom headers (starting with x-) there.
+  // The createReply endpoint handles standard threading headers automatically.
+  await withOutlookRetry(
+    () =>
+      client
+        .getClient()
+        .api(`/me/messages/${replyDraft.id}`)
+        .patch({
+          subject: body.subject,
+          body: {
+            contentType: "html",
+            content: body.messageHtml,
+          },
+          toRecipients: [{ emailAddress: { address: body.to } }],
+          ...(body.cc
+            ? { ccRecipients: [{ emailAddress: { address: body.cc } }] }
+            : {}),
+          ...(body.bcc
+            ? { bccRecipients: [{ emailAddress: { address: body.bcc } }] }
+            : {}),
+        }),
+    logger,
+  );
+
+  // Send the draft
+  await withOutlookRetry(
+    () => client.getClient().api(`/me/messages/${replyDraft.id}/send`).post({}),
+    logger,
+  );
+
+  // Draft ID is no longer valid after /send; Graph doesn't return sent message ID
+  return {
+    id: "",
+    conversationId: replyDraft.conversationId,
+  };
 }

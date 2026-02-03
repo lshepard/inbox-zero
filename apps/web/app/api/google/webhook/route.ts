@@ -2,27 +2,33 @@ import { after, NextResponse } from "next/server";
 import { withError } from "@/utils/middleware";
 import { env } from "@/env";
 import { processHistoryForUser } from "@/app/api/google/webhook/process-history";
-import { createScopedLogger, type Logger } from "@/utils/logger";
+import type { Logger } from "@/utils/logger";
 import { handleWebhookError } from "@/utils/webhook/error-handler";
+import { getWebhookEmailAccount } from "@/utils/webhook/validate-webhook-account";
 
 export const maxDuration = 300;
 
 // Google PubSub calls this endpoint each time a user recieves an email. We subscribe for updates via `api/google/watch`
-export const POST = withError(async (request) => {
+export const POST = withError("google/webhook", async (request) => {
   const searchParams = new URL(request.url).searchParams;
   const token = searchParams.get("token");
 
-  let logger = createScopedLogger("google/webhook");
+  let logger = request.logger;
 
-  if (
-    env.GOOGLE_PUBSUB_VERIFICATION_TOKEN &&
-    token !== env.GOOGLE_PUBSUB_VERIFICATION_TOKEN
-  ) {
-    logger.error("Invalid verification token", { token });
+  const verificationToken = env.GOOGLE_PUBSUB_VERIFICATION_TOKEN;
+
+  if (!verificationToken) {
+    logger.error("GOOGLE_PUBSUB_VERIFICATION_TOKEN not configured");
     return NextResponse.json(
-      {
-        message: "Invalid verification token",
-      },
+      { message: "Webhook not configured" },
+      { status: 500 },
+    );
+  }
+
+  if (token !== verificationToken) {
+    logger.error("Invalid verification token");
+    return NextResponse.json(
+      { message: "Invalid verification token" },
       { status: 403 },
     );
   }
@@ -51,9 +57,20 @@ async function processWebhookAsync(
   try {
     await processHistoryForUser(decodedData, {}, logger);
   } catch (error) {
+    // Look up email account to get emailAccountId for error tracking
+    const emailAccount = await getWebhookEmailAccount(
+      { email: decodedData.emailAddress.toLowerCase() },
+      logger,
+    ).catch((lookupError) => {
+      logger.error("Error getting email account for error handling", {
+        lookupError,
+      });
+      return null;
+    });
+
     await handleWebhookError(error, {
       email: decodedData.emailAddress,
-      emailAccountId: "unknown", // TODO: add emailAccountId
+      emailAccountId: emailAccount?.id || "unknown",
       url: "/api/google/webhook",
       logger,
     });

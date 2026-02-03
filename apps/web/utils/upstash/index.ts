@@ -1,6 +1,9 @@
 import { Client, type FlowControl, type HeadersInit } from "@upstash/qstash";
 import { env } from "@/env";
-import { INTERNAL_API_KEY_HEADER } from "@/utils/internal-api";
+import {
+  INTERNAL_API_KEY_HEADER,
+  getInternalApiUrl,
+} from "@/utils/internal-api";
 import { sleep } from "@/utils/sleep";
 import { createScopedLogger } from "@/utils/logger";
 
@@ -17,7 +20,7 @@ export async function publishToQstash<T>(
   flowControl?: FlowControl,
 ) {
   const client = getQstashClient();
-  const url = `${env.WEBHOOK_URL || env.NEXT_PUBLIC_BASE_URL}${path}`;
+  const url = `${getInternalApiUrl()}${path}`;
 
   if (client) {
     return client.publishJSON({
@@ -69,9 +72,18 @@ export async function publishToQstashQueue<T>({
   const client = getQstashClient();
 
   if (client) {
-    const queue = client.queue({ queueName });
-    queue.upsert({ parallelism });
-    return await queue.enqueueJSON({ url, body, headers });
+    try {
+      const queue = client.queue({ queueName });
+      await queue.upsert({ parallelism });
+      return await queue.enqueueJSON({ url, body, headers });
+    } catch (error) {
+      logger.error("Failed to publish to Qstash queue", {
+        url,
+        queueName,
+        error,
+      });
+      throw error;
+    }
   }
 
   return fallbackPublishToQstash<T>(url, body);

@@ -1,12 +1,10 @@
-import { createScopedLogger } from "@/utils/logger";
+import type { Logger } from "@/utils/logger";
 import type { OutlookClient } from "@/utils/outlook/client";
 import { escapeODataString } from "@/utils/outlook/odata-escape";
 import {
   publishBulkActionToTinybird,
   updateEmailMessagesForSender,
 } from "@/utils/email/bulk-action-tracking";
-
-const logger = createScopedLogger("outlook/batch");
 
 const GRAPH_JSON_BATCH_LIMIT = 20; // Microsoft Graph JSON batching limit
 
@@ -35,6 +33,7 @@ async function batch<TRequestBody = unknown, TResponseBody = unknown>({
   stopOnError = false,
   onFailure,
   context,
+  logger,
 }: {
   client: OutlookClient;
   requests: GraphBatchRequestItem<TRequestBody>[];
@@ -44,6 +43,7 @@ async function batch<TRequestBody = unknown, TResponseBody = unknown>({
     response: GraphBatchResponseItem<TResponseBody>;
   }) => void;
   context?: Record<string, unknown>;
+  logger: Logger;
 }): Promise<GraphBatchResponseItem<TResponseBody>[]> {
   if (requests.length === 0) return [];
 
@@ -92,7 +92,7 @@ async function batch<TRequestBody = unknown, TResponseBody = unknown>({
       logger.error("Graph batch request failed", {
         ...context,
         chunkSize: chunk.length,
-        error: error instanceof Error ? error.message : error,
+        error,
       });
       throw error;
     }
@@ -106,11 +106,13 @@ async function moveMessagesInBatches({
   messageIds,
   destinationId,
   action,
+  logger,
 }: {
   client: OutlookClient;
   messageIds: string[];
   destinationId: string;
   action: "archive" | "trash";
+  logger: Logger;
 }): Promise<void> {
   if (messageIds.length === 0) return;
 
@@ -135,12 +137,13 @@ async function moveMessagesInBatches({
   await batch({
     client,
     requests,
-    stopOnError: true,
+    stopOnError: false,
     context: {
       action,
       destinationId,
       messageCount: messageIds.length,
     },
+    logger,
     onFailure: ({ request, response }) => {
       const messageId = request ? requestIdToMessageId.get(request.id) : null;
       const body = response.body;
@@ -168,6 +171,7 @@ export async function moveMessagesForSenders({
   action,
   ownerEmail,
   emailAccountId,
+  logger,
 }: {
   client: OutlookClient;
   senders: string[];
@@ -175,6 +179,7 @@ export async function moveMessagesForSenders({
   action: "archive" | "trash";
   ownerEmail: string;
   emailAccountId: string;
+  logger: Logger;
 }): Promise<void> {
   if (senders.length === 0) return;
 
@@ -188,25 +193,35 @@ export async function moveMessagesForSenders({
       action === "archive"
         ? `${fromFilter} and parentFolderId eq 'inbox'`
         : fromFilter;
-    let skipToken: string | undefined;
 
+    // Use @odata.nextLink directly for pagination instead of extracting $skiptoken
+    // This is more reliable as Microsoft Graph may use different token formats
+    // See: https://learn.microsoft.com/en-us/graph/paging
+    let nextLink: string | undefined;
+
+    // Helper to fetch a page of messages
+    const fetchPage = async (url?: string) => {
+      if (url) {
+        // Use the full @odata.nextLink URL for subsequent pages
+        return client.getClient().api(url).get();
+      }
+      // First page: use fluent API
+      return client
+        .getClient()
+        .api("/me/messages")
+        .filter(filterExpression)
+        .top(100)
+        .select("id,conversationId")
+        .get();
+    };
+
+    // Process all pages
     do {
       try {
-        let request = client
-          .getClient()
-          .api("/me/messages")
-          .filter(filterExpression)
-          .top(100)
-          .select("id,conversationId");
-
-        if (skipToken) {
-          request = request.skipToken(skipToken);
-        }
-
         const response: {
           value?: Array<{ id?: string | null; conversationId?: string | null }>;
           "@odata.nextLink"?: string;
-        } = await request.get();
+        } = await fetchPage(nextLink);
 
         const allMessages = (response.value ?? []).filter(
           (message): message is { id: string; conversationId: string } =>
@@ -224,6 +239,7 @@ export async function moveMessagesForSenders({
               messageIds,
               destinationId,
               action,
+              logger,
             });
 
             const batchThreadIds = new Set(
@@ -265,28 +281,26 @@ export async function moveMessagesForSenders({
               ownerEmail,
               destinationId,
               messageIds,
-              error: error instanceof Error ? error.message : error,
+              error,
             });
           } finally {
             messageIds.forEach((id) => processedMessageIds.add(id));
           }
         }
 
-        const nextLink = response["@odata.nextLink"];
-        if (nextLink) {
-          const url = new URL(nextLink);
-          skipToken = url.searchParams.get("$skiptoken") ?? undefined;
-        } else {
-          skipToken = undefined;
-        }
+        nextLink = response["@odata.nextLink"];
+        logger.info("Pagination status", {
+          processedCount: processedMessageIds.size,
+          hasNextLink: !!nextLink,
+        });
       } catch (error) {
         logger.error("Failed to fetch messages from sender", {
           sender,
           action,
-          error: error instanceof Error ? error.message : error,
+          error,
         });
-        skipToken = undefined;
+        nextLink = undefined;
       }
-    } while (skipToken);
+    } while (nextLink);
   }
 }

@@ -41,8 +41,8 @@ export const runRulesAction = actionClient
 
       const emailAccount = await getEmailAccountWithAi({ emailAccountId });
 
-      if (!emailAccount) throw new Error("Email account not found");
-      if (!provider) throw new Error("Provider not found");
+      if (!emailAccount) throw new SafeError("Email account not found");
+      if (!provider) throw new SafeError("Provider not found");
 
       const emailProvider = await createEmailProvider({
         emailAccountId,
@@ -408,7 +408,7 @@ export const saveRulesPromptAction = actionClient
           } else {
             logger.error("Failed to create rule", {
               ruleName: rule.name,
-              error: error instanceof Error ? error.message : String(error),
+              error,
             });
           }
         }
@@ -500,7 +500,7 @@ export const createRulesAction = actionClient
               error instanceof Error ? error.message : String(error);
             logger.error("Failed to create rule", {
               ruleName: rule.name,
-              error: errorMessage,
+              error,
             });
             errors.push({
               ruleName: rule.name,
@@ -533,7 +533,7 @@ export const createRulesAction = actionClient
 export const generateRulesPromptAction = actionClient
   .metadata({ name: "generateRulesPrompt" })
   .inputSchema(z.object({}))
-  .action(async ({ ctx: { emailAccountId, provider } }) => {
+  .action(async ({ ctx: { emailAccountId, provider, logger } }) => {
     const emailAccount = await getEmailAccountWithAi({ emailAccountId });
 
     if (!emailAccount) throw new SafeError("Email account not found");
@@ -541,6 +541,7 @@ export const generateRulesPromptAction = actionClient
     const emailProvider = await createEmailProvider({
       emailAccountId,
       provider,
+      logger,
     });
     const lastSentMessages = await emailProvider.getSentMessages(50);
 

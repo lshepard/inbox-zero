@@ -7,6 +7,8 @@
         "NODE_ENV",
         "DATABASE_URL",
         "DIRECT_URL",
+        "PREVIEW_DATABASE_URL",
+        "PREVIEW_DATABASE_URL_UNPOOLED",
         "NEXTAUTH_SECRET",
         "AUTH_SECRET",
 
@@ -32,6 +34,7 @@
         "OPENROUTER_BACKUP_MODEL",
 
         "OPENAI_API_KEY",
+        "OPENAI_ZERO_DATA_RETENTION",
         "ANTHROPIC_API_KEY",
         "BEDROCK_ACCESS_KEY",
         "BEDROCK_SECRET_KEY",
@@ -41,6 +44,8 @@
         "OPENROUTER_API_KEY",
         "AI_GATEWAY_API_KEY",
         "OLLAMA_BASE_URL",
+        "OLLAMA_MODEL",
+        "PERPLEXITY_API_KEY",
 
         "UPSTASH_REDIS_URL",
         "UPSTASH_REDIS_TOKEN",
@@ -53,7 +58,7 @@
         "SENTRY_ORGANIZATION",
         "SENTRY_PROJECT",
 
-        "LOG_ZOD_ERRORS",
+        "DISABLE_LOG_ZOD_ERRORS",
         "ENABLE_DEBUG_LOGS",
 
         "LEMON_SQUEEZY_SIGNING_SECRET",
@@ -69,6 +74,7 @@
 
         "RESEND_API_KEY",
         "RESEND_AUDIENCE_ID",
+        "NEXT_PUBLIC_IS_RESEND_CONFIGURED",
 
         "LOOPS_API_SECRET",
 
@@ -76,11 +82,14 @@
 
         "ADMINS",
         "WEBHOOK_URL",
+        "INTERNAL_API_URL",
         "INTERNAL_API_KEY",
         "USE_BACKUP_MODEL",
         "WHITELIST_FROM",
         "API_KEY_SALT",
         "HEALTH_API_KEY",
+        "OAUTH_PROXY_URL",
+        "ADDITIONAL_TRUSTED_ORIGINS",
         "FB_CONVERSION_API_ACCESS_TOKEN",
         "FB_PIXEL_ID",
         "GITHUB_MARKETING_TOKEN",
@@ -124,11 +133,15 @@
         "NEXT_PUBLIC_WELCOME_UPGRADE_ENABLED",
         "NEXT_PUBLIC_AXIOM_DATASET",
         "NEXT_PUBLIC_AXIOM_TOKEN",
-        "NEXT_PUBLIC_BEDROCK_SONNET_MODEL",
-        "NEXT_PUBLIC_OLLAMA_MODEL",
-        "NEXT_PUBLIC_APP_HOME_PATH",
         "NEXT_PUBLIC_DUB_REFER_DOMAIN",
-        "NEXT_PUBLIC_USE_AEONIK_FONT"
+        "NEXT_PUBLIC_USE_AEONIK_FONT",
+        "NEXT_PUBLIC_BYPASS_PREMIUM_CHECKS",
+        "NEXT_PUBLIC_DIGEST_ENABLED",
+        "NEXT_PUBLIC_MEETING_BRIEFS_ENABLED",
+        "NEXT_PUBLIC_INTEGRATIONS_ENABLED",
+        "NEXT_PUBLIC_SMART_FILING_ENABLED",
+        "NEXT_PUBLIC_FOLLOW_UP_REMINDERS_ENABLED",
+        "NEXT_PUBLIC_CLEANER_ENABLED"
       ],
       "outputs": [".next/**", "!.next/cache/**"]
     },
@@ -141,8 +154,8 @@
       "cache": false,
       "persistent": true
     },
-    "//#format-and-lint": {},
-    "//#format-and-lint:fix": {
+    "//#check": {},
+    "//#fix": {
       "cache": false
     }
   }

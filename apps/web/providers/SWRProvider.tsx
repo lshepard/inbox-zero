@@ -11,9 +11,12 @@ import {
 import { SWRConfig, mutate } from "swr";
 import { captureException } from "@/utils/error";
 import { useAccount } from "@/providers/EmailAccountProvider";
-import { EMAIL_ACCOUNT_HEADER } from "@/utils/config";
+import {
+  EMAIL_ACCOUNT_HEADER,
+  MICROSOFT_AUTH_EXPIRED_ERROR_CODE,
+  NO_REFRESH_TOKEN_ERROR_CODE,
+} from "@/utils/config";
 import { prefixPath } from "@/utils/path";
-import { NO_REFRESH_TOKEN_ERROR_CODE } from "@/utils/config";
 
 // https://swr.vercel.app/docs/error-handling#status-code-and-error-object
 const fetcher = async (
@@ -32,11 +35,32 @@ const fetcher = async (
   const res = await fetch(url, newInit);
 
   if (!res.ok) {
-    const errorData = await res.json();
+    // Try to parse JSON, but handle cases where response isn't JSON (e.g. HMR 404s)
+    let errorData: Record<string, unknown> = {};
+    try {
+      errorData = await res.json();
+    } catch {
+      // Response wasn't JSON - common during dev HMR, unexpected in production
+      if (process.env.NODE_ENV !== "development") {
+        console.error("Failed to parse error response as JSON", {
+          url,
+          status: res.status,
+          statusText: res.statusText,
+        });
+      }
+    }
 
-    if (errorData.errorCode === NO_REFRESH_TOKEN_ERROR_CODE) {
+    if (
+      errorData.errorCode === NO_REFRESH_TOKEN_ERROR_CODE ||
+      errorData.errorCode === MICROSOFT_AUTH_EXPIRED_ERROR_CODE
+    ) {
       if (emailAccountId) {
-        captureException(new Error("Refresh token missing"), {
+        const errorMessage =
+          errorData.errorCode === MICROSOFT_AUTH_EXPIRED_ERROR_CODE
+            ? "Microsoft authorization expired"
+            : "Refresh token missing";
+
+        captureException(new Error(errorMessage), {
           extra: {
             url,
             status: res.status,
@@ -46,7 +70,7 @@ const fetcher = async (
           },
         });
 
-        console.log("Refresh token missing, redirecting to consent page...");
+        console.log(`${errorMessage}, redirecting to consent page...`);
         const redirectUrl = prefixPath(emailAccountId, "/permissions/consent");
         window.location.href = redirectUrl;
         return;
@@ -54,10 +78,10 @@ const fetcher = async (
     }
 
     const errorMessage =
-      errorData.message || "An error occurred while fetching the data.";
-    const error: Error & { info?: any; status?: number } = new Error(
-      errorMessage,
-    );
+      (errorData.message as string) ||
+      "An error occurred while fetching the data.";
+    const error: Error & { info?: Record<string, unknown>; status?: number } =
+      new Error(errorMessage);
 
     // Attach extra info to the error object.
     error.info = errorData;
@@ -91,7 +115,7 @@ const defaultContextValue = {
   resetCache: () => {},
 };
 
-const SWRContext = createContext<Context>(defaultContextValue);
+export const SWRContext = createContext<Context>(defaultContextValue);
 
 export const SWRProvider = (props: { children: React.ReactNode }) => {
   const [provider, setProvider] = useState(new Map());
@@ -133,8 +157,8 @@ export const SWRProvider = (props: { children: React.ReactNode }) => {
         value={{
           fetcher: enhancedFetcher,
           provider: () => provider,
-          // TODO: Send to Sentry
           onError: (error) => console.log("SWR error:", error),
+          ...getDevOnlySWRConfig(),
         }}
       >
         {props.children}
@@ -143,4 +167,28 @@ export const SWRProvider = (props: { children: React.ReactNode }) => {
   );
 };
 
-export { SWRContext };
+// Dev-only config to handle transient 404s during HMR
+function getDevOnlySWRConfig() {
+  if (process.env.NODE_ENV !== "development") return {};
+
+  return {
+    keepPreviousData: true,
+    onErrorRetry: (
+      error: Error & { status?: number },
+      _key: string,
+      _config: unknown,
+      revalidate: (opts: { retryCount: number }) => void,
+      { retryCount }: { retryCount: number },
+    ) => {
+      // Retry 404s quickly (likely HMR transient errors)
+      if (error.status === 404) {
+        setTimeout(() => revalidate({ retryCount }), 500);
+        return;
+      }
+      // Don't retry on other client errors (4xx)
+      if (error.status && error.status >= 400 && error.status < 500) return;
+      // Default exponential backoff for server errors
+      setTimeout(() => revalidate({ retryCount }), 5000 * 2 ** retryCount);
+    },
+  };
+}

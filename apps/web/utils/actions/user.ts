@@ -12,6 +12,7 @@ import { headers } from "next/headers";
 import {
   saveAboutBody,
   saveSignatureBody,
+  saveWritingStyleBody,
 } from "@/utils/actions/user.validation";
 import { clearLastEmailAccountCookie } from "@/utils/cookies.server";
 import { aliasPosthogUser } from "@/utils/posthog";
@@ -36,6 +37,18 @@ export const saveSignatureAction = actionClient
     });
   });
 
+export const saveWritingStyleAction = actionClient
+  .metadata({ name: "saveWritingStyle" })
+  .inputSchema(saveWritingStyleBody)
+  .action(
+    async ({ parsedInput: { writingStyle }, ctx: { emailAccountId } }) => {
+      await prisma.emailAccount.update({
+        where: { id: emailAccountId },
+        data: { writingStyle },
+      });
+    },
+  );
+
 export const resetAnalyticsAction = actionClient
   .metadata({ name: "resetAnalytics" })
   .action(async ({ ctx: { emailAccountId } }) => {
@@ -58,7 +71,7 @@ export const deleteAccountAction = actionClientUser
       .catch((error) => {
         logger.error("Failed to sign out", { error });
       });
-    await deleteUser({ userId });
+    await deleteUser({ userId, logger });
   });
 
 export const deleteEmailAccountAction = actionClientUser

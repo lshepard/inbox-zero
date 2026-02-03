@@ -7,7 +7,7 @@ import {
   changeKeepToDoneSchema,
 } from "@/utils/actions/clean.validation";
 import { bulkPublishToQstash } from "@/utils/upstash";
-import { env } from "@/env";
+import { getInternalApiUrl } from "@/utils/internal-api";
 import {
   getLabel,
   getOrCreateInboxZeroLabel,
@@ -139,7 +139,7 @@ export const cleanInboxAction = actionClient
 
           if (threads.length === 0) break;
 
-          const url = `${env.WEBHOOK_URL || env.NEXT_PUBLIC_BASE_URL}/api/clean`;
+          const url = `${getInternalApiUrl()}/api/clean`;
 
           logger.info("Pushing to Qstash", {
             threadCount: threads.length,
@@ -200,7 +200,7 @@ export const undoCleanInboxAction = actionClient
       ctx: { emailAccountId, logger },
       parsedInput: { threadId, markedDone, action },
     }) => {
-      const gmail = await getGmailClientForEmail({ emailAccountId });
+      const gmail = await getGmailClientForEmail({ emailAccountId, logger });
 
       // nothing to do atm if wasn't marked done
       if (!markedDone) return { success: true };
@@ -265,7 +265,7 @@ export const changeKeepToDoneAction = actionClient
       ctx: { emailAccountId, logger },
       parsedInput: { threadId, action },
     }) => {
-      const gmail = await getGmailClientForEmail({ emailAccountId });
+      const gmail = await getGmailClientForEmail({ emailAccountId, logger });
 
       // Get the label to add (archived or marked_read)
       const actionLabel = await getOrCreateInboxZeroLabel({

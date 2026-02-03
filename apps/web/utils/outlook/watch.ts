@@ -1,14 +1,12 @@
 import type { Client } from "@microsoft/microsoft-graph-client";
 import type { Subscription } from "@microsoft/microsoft-graph-types";
-import addDays from "date-fns/addDays";
+import { addDays } from "date-fns/addDays";
 import { env } from "@/env";
 import { withOutlookRetry } from "@/utils/outlook/retry";
+import type { Logger } from "@/utils/logger";
 
-export async function watchOutlook(client: Client) {
-  const base =
-    env.NODE_ENV === "development"
-      ? env.WEBHOOK_URL || env.NEXT_PUBLIC_BASE_URL
-      : env.NEXT_PUBLIC_BASE_URL;
+export async function watchOutlook(client: Client, logger: Logger) {
+  const base = env.WEBHOOK_URL || env.NEXT_PUBLIC_BASE_URL;
 
   // must be https
   const notificationUrl = new URL("/api/outlook/webhook", base);
@@ -24,8 +22,9 @@ export async function watchOutlook(client: Client) {
     clientState: env.MICROSOFT_WEBHOOK_CLIENT_STATE,
   };
 
-  const subscription: Subscription = await withOutlookRetry(() =>
-    client.api("/subscriptions").post(subscriptionPayload),
+  const subscription: Subscription = await withOutlookRetry(
+    () => client.api("/subscriptions").post(subscriptionPayload),
+    logger,
   );
 
   return {
@@ -34,8 +33,13 @@ export async function watchOutlook(client: Client) {
   };
 }
 
-export async function unwatchOutlook(client: Client, subscriptionId: string) {
-  await withOutlookRetry(() =>
-    client.api(`/subscriptions/${subscriptionId}`).delete(),
+export async function unwatchOutlook(
+  client: Client,
+  subscriptionId: string,
+  logger: Logger,
+) {
+  await withOutlookRetry(
+    () => client.api(`/subscriptions/${subscriptionId}`).delete(),
+    logger,
   );
 }

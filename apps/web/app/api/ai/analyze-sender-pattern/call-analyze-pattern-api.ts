@@ -1,14 +1,18 @@
 import type { AnalyzeSenderPatternBody } from "@/app/api/ai/analyze-sender-pattern/route";
-import { INTERNAL_API_KEY_HEADER } from "@/utils/internal-api";
+import {
+  INTERNAL_API_KEY_HEADER,
+  getInternalApiUrl,
+} from "@/utils/internal-api";
 import { env } from "@/env";
-import { createScopedLogger } from "@/utils/logger";
+import type { Logger } from "@/utils/logger";
 
-const logger = createScopedLogger("sender-pattern-analysis");
-
-export async function analyzeSenderPattern(body: AnalyzeSenderPatternBody) {
+export async function analyzeSenderPattern(
+  body: AnalyzeSenderPatternBody,
+  logger: Logger,
+) {
   try {
     const response = await fetch(
-      `${env.NEXT_PUBLIC_BASE_URL}/api/ai/analyze-sender-pattern`,
+      `${getInternalApiUrl()}/api/ai/analyze-sender-pattern`,
       {
         method: "POST",
         body: JSON.stringify(body),
@@ -31,7 +35,7 @@ export async function analyzeSenderPattern(body: AnalyzeSenderPatternBody) {
     logger.error("Error in sender pattern analysis", {
       emailAccountId: body.emailAccountId,
       from: body.from,
-      error: error instanceof Error ? error.message : error,
+      error,
     });
   }
 }

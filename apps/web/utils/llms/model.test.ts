@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { getModel } from "./model";
-import { Provider, Model } from "./config";
+import { Provider } from "./config";
 import { env } from "@/env";
 import type { UserAIFields } from "./types";
 
@@ -31,7 +31,7 @@ vi.mock("@openrouter/ai-sdk-provider", () => ({
   })),
 }));
 
-vi.mock("ollama-ai-provider", () => ({
+vi.mock("ollama-ai-provider-v2", () => ({
   createOllama: vi.fn(() => (model: string) => ({ model })),
 }));
 
@@ -50,12 +50,11 @@ vi.mock("@/env", () => ({
     ANTHROPIC_API_KEY: "test-anthropic-key",
     GROQ_API_KEY: "test-groq-key",
     OPENROUTER_API_KEY: "test-openrouter-key",
-    OLLAMA_BASE_URL: "http://localhost:11434",
-    NEXT_PUBLIC_OLLAMA_MODEL: "llama3",
+    OLLAMA_BASE_URL: "http://localhost:11434/api",
+    OLLAMA_MODEL: "llama3",
     BEDROCK_REGION: "us-west-2",
     BEDROCK_ACCESS_KEY: "",
     BEDROCK_SECRET_KEY: "",
-    NEXT_PUBLIC_BEDROCK_SONNET_MODEL: "anthropic.claude-3-sonnet-20240229-v1:0",
   },
 }));
 
@@ -73,6 +72,9 @@ describe("Models", () => {
   beforeEach(() => {
     vi.resetAllMocks();
     vi.mocked(env).DEFAULT_LLM_PROVIDER = "openai";
+    vi.mocked(env).DEFAULT_LLM_MODEL = undefined;
+    vi.mocked(env).BEDROCK_ACCESS_KEY = "";
+    vi.mocked(env).BEDROCK_SECRET_KEY = "";
   });
 
   describe("getModel", () => {
@@ -85,19 +87,19 @@ describe("Models", () => {
 
       const result = getModel(userAi);
       expect(result.provider).toBe(Provider.OPEN_AI);
-      expect(result.modelName).toBe("gpt-4o");
+      expect(result.modelName).toBe("gpt-5.1");
     });
 
     it("should use user's provider and model when API key is provided", () => {
       const userAi: UserAIFields = {
         aiApiKey: "user-api-key",
         aiProvider: Provider.GOOGLE,
-        aiModel: Model.GEMINI_1_5_PRO,
+        aiModel: "gemini-1.5-pro-latest",
       };
 
       const result = getModel(userAi);
       expect(result.provider).toBe(Provider.GOOGLE);
-      expect(result.modelName).toBe(Model.GEMINI_1_5_PRO);
+      expect(result.modelName).toBe("gemini-1.5-pro-latest");
     });
 
     it("should use user's API key with default provider when only API key is provided", () => {
@@ -109,19 +111,19 @@ describe("Models", () => {
 
       const result = getModel(userAi);
       expect(result.provider).toBe(Provider.OPEN_AI);
-      expect(result.modelName).toBe("gpt-4o");
+      expect(result.modelName).toBe("gpt-5.1");
     });
 
     it("should configure Google model correctly", () => {
       const userAi: UserAIFields = {
         aiApiKey: "user-api-key",
         aiProvider: Provider.GOOGLE,
-        aiModel: Model.GEMINI_1_5_PRO,
+        aiModel: "gemini-1.5-pro-latest",
       };
 
       const result = getModel(userAi);
       expect(result.provider).toBe(Provider.GOOGLE);
-      expect(result.modelName).toBe(Model.GEMINI_1_5_PRO);
+      expect(result.modelName).toBe("gemini-1.5-pro-latest");
       expect(result.model).toBeDefined();
     });
 
@@ -129,12 +131,12 @@ describe("Models", () => {
       const userAi: UserAIFields = {
         aiApiKey: "user-api-key",
         aiProvider: Provider.GROQ,
-        aiModel: Model.GROQ_LLAMA_3_3_70B,
+        aiModel: "llama-3.3-70b-versatile",
       };
 
       const result = getModel(userAi);
       expect(result.provider).toBe(Provider.GROQ);
-      expect(result.modelName).toBe(Model.GROQ_LLAMA_3_3_70B);
+      expect(result.modelName).toBe("llama-3.3-70b-versatile");
       expect(result.model).toBeDefined();
     });
 
@@ -142,33 +144,38 @@ describe("Models", () => {
       const userAi: UserAIFields = {
         aiApiKey: "user-api-key",
         aiProvider: Provider.OPENROUTER,
-        aiModel: Model.GROQ_LLAMA_3_3_70B,
+        aiModel: "llama-3.3-70b-versatile",
       };
 
       const result = getModel(userAi);
       expect(result.provider).toBe(Provider.OPENROUTER);
-      expect(result.modelName).toBe(Model.GROQ_LLAMA_3_3_70B);
+      expect(result.modelName).toBe("llama-3.3-70b-versatile");
       expect(result.model).toBeDefined();
     });
 
-    // it("should configure Ollama model correctly", () => {
-    //   const userAi: UserAIFields = {
-    //     aiApiKey: "user-api-key",
-    //     aiProvider: Provider.OLLAMA!,
-    //     aiModel: "llama3",
-    //   };
+    it("should configure Ollama model correctly via env vars", () => {
+      const userAi: UserAIFields = {
+        aiApiKey: null,
+        aiProvider: null,
+        aiModel: null,
+      };
 
-    //   const result = getModel(userAi);
-    //   expect(result.provider).toBe(Provider.OLLAMA);
-    //   expect(result.modelName).toBe("llama3");
-    //   expect(result.model).toBeDefined();
-    // });
+      vi.mocked(env).DEFAULT_LLM_PROVIDER = "ollama";
+      vi.mocked(env).OLLAMA_MODEL = "llama3";
+      vi.mocked(env).OLLAMA_BASE_URL = "http://localhost:11434/api";
+
+      const result = getModel(userAi);
+      expect(result.provider).toBe(Provider.OLLAMA);
+      expect(result.modelName).toBe("llama3");
+      expect(result.model).toBeDefined();
+      expect(result.backupModel).toBeNull(); // No backup for local Ollama
+    });
 
     it("should configure Anthropic model correctly without Bedrock credentials", () => {
       const userAi: UserAIFields = {
         aiApiKey: "user-api-key",
         aiProvider: Provider.ANTHROPIC,
-        aiModel: Model.CLAUDE_3_7_SONNET_ANTHROPIC,
+        aiModel: "claude-3-7-sonnet-20250219",
       };
 
       vi.mocked(env).BEDROCK_ACCESS_KEY = "";
@@ -176,23 +183,28 @@ describe("Models", () => {
 
       const result = getModel(userAi);
       expect(result.provider).toBe(Provider.ANTHROPIC);
-      expect(result.modelName).toBe(Model.CLAUDE_3_7_SONNET_ANTHROPIC);
+      expect(result.modelName).toBe("claude-3-7-sonnet-20250219");
       expect(result.model).toBeDefined();
     });
 
-    it("should configure Anthropic model with Bedrock when Bedrock credentials exist", () => {
+    it("should configure Bedrock model correctly via env vars", () => {
       const userAi: UserAIFields = {
-        aiApiKey: "user-api-key",
-        aiProvider: Provider.ANTHROPIC,
-        aiModel: Model.CLAUDE_3_7_SONNET_BEDROCK,
+        aiApiKey: null,
+        aiProvider: null,
+        aiModel: null,
       };
 
+      vi.mocked(env).DEFAULT_LLM_PROVIDER = "bedrock";
+      vi.mocked(env).DEFAULT_LLM_MODEL =
+        "us.anthropic.claude-3-7-sonnet-20250219-v1:0";
       vi.mocked(env).BEDROCK_ACCESS_KEY = "test-bedrock-key";
       vi.mocked(env).BEDROCK_SECRET_KEY = "test-bedrock-secret";
 
       const result = getModel(userAi);
-      expect(result.provider).toBe(Provider.ANTHROPIC);
-      expect(result.modelName).toBe(Model.CLAUDE_3_7_SONNET_BEDROCK);
+      expect(result.provider).toBe(Provider.BEDROCK);
+      expect(result.modelName).toBe(
+        "us.anthropic.claude-3-7-sonnet-20250219-v1:0",
+      );
       expect(result.model).toBeDefined();
     });
 
@@ -289,9 +301,13 @@ describe("Models", () => {
         aiModel: null,
       };
 
+      // Reset to default
+      vi.mocked(env).DEFAULT_LLM_PROVIDER = "openai";
+      vi.mocked(env).DEFAULT_LLM_MODEL = undefined;
+
       const result = getModel(userAi, "default");
       expect(result.provider).toBe(Provider.OPEN_AI);
-      expect(result.modelName).toBe("gpt-4o");
+      expect(result.modelName).toBe("gpt-5.1");
     });
 
     it("should use OpenRouter with provider options for default model", () => {

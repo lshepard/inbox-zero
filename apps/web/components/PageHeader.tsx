@@ -11,22 +11,22 @@ type Video = {
   muxPlaybackId?: string;
 };
 
-export function PageHeader({
-  title,
-  description,
-  video,
-}: {
+interface PageHeaderProps {
   title: string;
-  description: string;
   video?: Video;
-}) {
+  description?: string;
+}
+
+export function PageHeader({ title, video, description }: PageHeaderProps) {
   return (
     <div>
-      <PageHeading>{title}</PageHeading>
       <div className="flex flex-col sm:flex-row items-start sm:items-center mt-1 gap-3">
-        <PageSubHeading className="hidden sm:block">
-          {description}
-        </PageSubHeading>
+        <div>
+          <PageHeading>{title}</PageHeading>
+          {description && (
+            <PageSubHeading className="mt-1">{description}</PageSubHeading>
+          )}
+        </div>
         {video && (video.youtubeVideoId || video.muxPlaybackId) && (
           <WatchVideo video={video} />
         )}

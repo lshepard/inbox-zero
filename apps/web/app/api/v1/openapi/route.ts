@@ -6,9 +6,13 @@ import {
   extendZodWithOpenApi,
 } from "@asteasolutions/zod-to-openapi";
 import {
-  groupEmailsQuerySchema,
-  groupEmailsResponseSchema,
-} from "@/app/api/v1/group/[groupId]/emails/validation";
+  statsByPeriodQuerySchema,
+  statsByPeriodResponseSchema,
+} from "@/app/api/v1/stats/by-period/validation";
+import {
+  responseTimeQuerySchema,
+  responseTimeResponseSchema,
+} from "@/app/api/v1/stats/response-time/validation";
 import { API_KEY_HEADER } from "@/utils/api-auth";
 
 extendZodWithOpenApi(z);
@@ -23,25 +27,40 @@ registry.registerComponent("securitySchemes", "ApiKeyAuth", {
 
 registry.registerPath({
   method: "get",
-  path: "/group/{groupId}/emails",
-  description: "Get group emails",
+  path: "/stats/by-period",
+  description:
+    "Get email statistics grouped by time period. Returns counts of emails by status (all, sent, read, unread, archived, unarchived) for each period.",
   security: [{ ApiKeyAuth: [] }],
   request: {
-    params: z.object({
-      groupId: z
-        .string()
-        .describe(
-          "You can find the group id by going to `https://www.getinboxzero.com/automation?tab=groups`, clicking `Matching Emails`, and then copying the id from the URL.",
-        ),
-    }),
-    query: groupEmailsQuerySchema,
+    query: statsByPeriodQuerySchema,
   },
   responses: {
     200: {
       description: "Successful response",
       content: {
         "application/json": {
-          schema: groupEmailsResponseSchema,
+          schema: statsByPeriodResponseSchema,
+        },
+      },
+    },
+  },
+});
+
+registry.registerPath({
+  method: "get",
+  path: "/stats/response-time",
+  description:
+    "Get email response time statistics. Returns summary stats, distribution, and trend data showing how quickly you respond to emails.",
+  security: [{ ApiKeyAuth: [] }],
+  request: {
+    query: responseTimeQuerySchema,
+  },
+  responses: {
+    200: {
+      description: "Successful response",
+      content: {
+        "application/json": {
+          schema: responseTimeResponseSchema,
         },
       },
     },
@@ -64,7 +83,7 @@ export async function GET(request: NextRequest) {
         ? [{ url: `${customHost}/api/v1`, description: "Custom host" }]
         : []),
       {
-        url: "https://getinboxzero.com/api/v1",
+        url: "https://www.getinboxzero.com/api/v1",
         description: "Production server",
       },
       { url: "http://localhost:3000/api/v1", description: "Local development" },

@@ -55,22 +55,13 @@ export interface EmailProvider {
   getMessageByRfc822MessageId(
     rfc822MessageId: string,
   ): Promise<ParsedMessage | null>;
-  getMessagesByFields(options: {
-    froms?: string[];
-    tos?: string[];
-    subjects?: string[];
-    before?: Date;
-    after?: Date;
-    type?: "inbox" | "sent" | "all";
-    excludeSent?: boolean;
-    excludeInbox?: boolean;
-    maxResults?: number;
-    pageToken?: string;
-  }): Promise<{
-    messages: ParsedMessage[];
-    nextPageToken?: string;
-  }>;
   getSentMessages(maxResults?: number): Promise<ParsedMessage[]>;
+  getInboxMessages(maxResults?: number): Promise<ParsedMessage[]>;
+  getSentMessageIds(options: {
+    maxResults: number;
+    after?: Date;
+    before?: Date;
+  }): Promise<{ id: string; threadId: string }[]>;
   getSentThreadsExcluding(options: {
     excludeToEmails?: string[];
     excludeFromEmails?: string[];
@@ -113,7 +104,13 @@ export interface EmailProvider {
   removeThreadLabels(threadId: string, labelIds: string[]): Promise<void>;
   draftEmail(
     email: ParsedMessage,
-    args: { to?: string; subject?: string; content: string },
+    args: {
+      to?: string;
+      subject?: string;
+      content: string;
+      cc?: string;
+      bcc?: string;
+    },
     userEmail: string,
     executedRule?: { id: string; threadId: string; emailAccountId: string },
   ): Promise<{ draftId: string }>;
@@ -130,6 +127,7 @@ export interface EmailProvider {
       threadId: string;
       headerMessageId: string;
       references?: string;
+      messageId?: string; // Platform-specific message ID (Graph ID for Outlook)
     };
     to: string;
     cc?: string;
@@ -155,6 +153,19 @@ export interface EmailProvider {
   markReadThread(threadId: string, read: boolean): Promise<void>;
   getDraft(draftId: string): Promise<ParsedMessage | null>;
   deleteDraft(draftId: string): Promise<void>;
+  createDraft(params: {
+    to: string;
+    subject: string;
+    messageHtml: string;
+    replyToMessageId?: string; // For proper threading
+  }): Promise<{ id: string }>;
+  updateDraft(
+    draftId: string,
+    params: {
+      messageHtml?: string;
+      subject?: string;
+    },
+  ): Promise<void>;
   createLabel(name: string, description?: string): Promise<EmailLabel>;
   deleteLabel(labelId: string): Promise<void>;
   getOrCreateInboxZeroLabel(key: InboxZeroLabel): Promise<EmailLabel>;
@@ -184,6 +195,13 @@ export interface EmailProvider {
     messages: ParsedMessage[];
     nextPageToken?: string;
   }>;
+  getMessagesWithAttachments(options: {
+    maxResults?: number;
+    pageToken?: string;
+  }): Promise<{
+    messages: ParsedMessage[];
+    nextPageToken?: string;
+  }>;
   getMessagesFromSender(options: {
     senderEmail: string;
     maxResults?: number;
@@ -194,6 +212,10 @@ export interface EmailProvider {
     messages: ParsedMessage[];
     nextPageToken?: string;
   }>;
+  getThreadsWithParticipant(options: {
+    participantEmail: string;
+    maxThreads?: number;
+  }): Promise<EmailThread[]>;
   getMessagesBatch(messageIds: string[]): Promise<ParsedMessage[]>;
   getAccessToken(): string;
   checkIfReplySent(senderEmail: string): Promise<boolean>;
@@ -245,6 +267,6 @@ export interface EmailProvider {
     ownerEmail: string,
     folderName: string,
   ): Promise<void>;
-  getOrCreateOutlookFolderIdByName(folderName: string): Promise<string>;
+  getOrCreateFolderIdByName(folderName: string): Promise<string>;
   getSignatures(): Promise<EmailSignature[]>;
 }
