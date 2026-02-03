@@ -144,7 +144,7 @@ IMPORTANT: Use these available time slots when responding to meeting requests. M
 ${emailAccount.calendarBookingLink}
 </booking_link>
 
-You can suggest this booking link if it helps with scheduling (e.g., "Feel free to book a time: [link]"). Use your judgment on whether to include it.
+Only include this link if the sender explicitly requested a call or meeting. Do not proactively suggest calls.
 `
     : "";
 
@@ -206,52 +206,44 @@ export async function aiDraftReply({
   mcpContext: string | null;
   meetingContext: string | null;
 }) {
-  try {
-    logger.info("Drafting email reply", {
-      messageCount: messages.length,
-      hasKnowledge: !!knowledgeBaseContent,
-      hasHistory: !!emailHistorySummary,
-      calendarAvailability: calendarAvailability
-        ? {
-            noAvailability: calendarAvailability.noAvailability,
-            suggestedTimesCount:
-              calendarAvailability.suggestedTimes?.length || 0,
-          }
-        : null,
-    });
+  logger.info("Drafting email reply", {
+    messageCount: messages.length,
+    hasKnowledge: !!knowledgeBaseContent,
+    hasHistory: !!emailHistorySummary,
+    calendarAvailability: calendarAvailability
+      ? {
+          noAvailability: calendarAvailability.noAvailability,
+          suggestedTimesCount: calendarAvailability.suggestedTimes?.length || 0,
+        }
+      : null,
+  });
 
-    const prompt = getUserPrompt({
-      messages,
-      emailAccount,
-      knowledgeBaseContent,
-      emailHistorySummary,
-      emailHistoryContext,
-      calendarAvailability,
-      writingStyle: writingStyle || defaultWritingStyle,
-      mcpContext,
-      meetingContext,
-    });
+  const prompt = getUserPrompt({
+    messages,
+    emailAccount,
+    knowledgeBaseContent,
+    emailHistorySummary,
+    emailHistoryContext,
+    calendarAvailability,
+    writingStyle: writingStyle || defaultWritingStyle,
+    mcpContext,
+    meetingContext,
+  });
 
-    const modelOptions = getModel(emailAccount.user);
+  const modelOptions = getModel(emailAccount.user);
 
-    const generateObject = createGenerateObject({
-      emailAccount,
-      label: "Draft reply",
-      modelOptions,
-    });
+  const generateObject = createGenerateObject({
+    emailAccount,
+    label: "Draft reply",
+    modelOptions,
+  });
 
-    const result = await generateObject({
-      ...modelOptions,
-      system: systemPrompt,
-      prompt,
-      schema: draftSchema,
-    });
+  const result = await generateObject({
+    ...modelOptions,
+    system: systemPrompt,
+    prompt,
+    schema: draftSchema,
+  });
 
-    return result.object.reply;
-  } catch (error) {
-    logger.error("Failed to draft email reply", { error });
-    return {
-      error: "Failed to draft email reply",
-    };
-  }
+  return result.object.reply;
 }

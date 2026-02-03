@@ -9,6 +9,7 @@ import { escapeODataString } from "@/utils/outlook/odata-escape";
 import { withOutlookRetry } from "@/utils/outlook/retry";
 import { formatEmailWithName } from "@/utils/email";
 import type { Logger } from "@/utils/logger";
+import { isOutlookThrottlingError } from "@/utils/error";
 
 // Standard fields to select when fetching messages from Microsoft Graph API
 // internetMessageId is the RFC 5322 Message-ID header, needed for cross-provider email threading
@@ -33,23 +34,22 @@ export async function getFolderIds(client: OutlookClient, logger: Logger) {
   const cachedFolderIds = client.getFolderIdCache();
   if (cachedFolderIds) return cachedFolderIds;
 
-  // First get the well-known folders
   const wellKnownFolders = await Promise.all(
     Object.entries(WELL_KNOWN_FOLDERS).map(async ([key, folderName]) => {
-      try {
-        const response = await client
-          .getClient()
-          .api(`/me/mailFolders/${folderName}`)
-          .select("id")
-          .get();
-        return [key, response.id];
-      } catch (error) {
-        logger.warn("Failed to get well-known folder", {
-          folderName,
-          error,
-        });
-        return [key, null];
-      }
+      const response: { id?: string | null } = await withOutlookRetry(
+        () =>
+          client
+            .getClient()
+            .api(`/me/mailFolders/${folderName}`)
+            .select("id")
+            .get(),
+        logger,
+      ).catch((error) => {
+        logWellKnownFolderFetchError(logger, folderName, error);
+        return { id: null };
+      });
+
+      return [key, response.id ?? null] as [string, string | null];
     }),
   );
 
@@ -75,7 +75,10 @@ export async function getCategoryMap(
 
   try {
     const response: { value: Array<{ id?: string; displayName?: string }> } =
-      await client.getClient().api("/me/outlook/masterCategories").get();
+      await withOutlookRetry(
+        () => client.getClient().api("/me/outlook/masterCategories").get(),
+        logger,
+      );
 
     const categoryMap = new Map<string, string>();
     for (const category of response.value) {
@@ -542,21 +545,35 @@ export async function queryMessagesWithAttachments(
         logger,
       );
 
-    const messages = await convertMessages(response.value, {}, categoryMap);
+    // Sort in memory for consistent ordering across all pages
+    const sortedMessages = response.value.sort((a, b) => {
+      const dateA = new Date(a.receivedDateTime || 0).getTime();
+      const dateB = new Date(b.receivedDateTime || 0).getTime();
+      return dateB - dateA;
+    });
+
+    const messages = await convertMessages(sortedMessages, {}, categoryMap);
     return { messages, nextPageToken: response["@odata.nextLink"] };
   }
 
   // Build request with hasAttachments filter
+  // Note: createMessagesRequest already includes .expand(MESSAGE_EXPAND_ATTACHMENTS)
+  // Avoid adding .orderby() to prevent "restriction or sort order is too complex" error
   const request = createMessagesRequest(client)
     .top(maxResults)
-    .filter("hasAttachments eq true")
-    .expand("attachments($select=id,name,contentType,size)")
-    .orderby("receivedDateTime DESC");
+    .filter("hasAttachments eq true");
 
   const response: { value: Message[]; "@odata.nextLink"?: string } =
     await withOutlookRetry(() => request.get(), logger);
 
-  const messages = await convertMessages(response.value, {}, categoryMap);
+  // Sort in memory to avoid "restriction or sort order is too complex" error
+  const sortedMessages = response.value.sort((a, b) => {
+    const dateA = new Date(a.receivedDateTime || 0).getTime();
+    const dateB = new Date(b.receivedDateTime || 0).getTime();
+    return dateB - dateA;
+  });
+
+  const messages = await convertMessages(sortedMessages, {}, categoryMap);
 
   logger.info("Messages with attachments fetched", {
     messageCount: messages.length,
@@ -752,4 +769,16 @@ function convertAttachments(
       "content-id": "",
     },
   }));
+}
+
+function logWellKnownFolderFetchError(
+  logger: Logger,
+  folderName: string,
+  error: unknown,
+) {
+  const log = isOutlookThrottlingError(error) ? logger.info : logger.warn;
+  log("Failed to get well-known folder", {
+    folderName,
+    error,
+  });
 }

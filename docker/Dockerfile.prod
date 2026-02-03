@@ -18,6 +18,8 @@ COPY packages/tsconfig/package.json packages/tsconfig/package.json
 
 # Copy Prisma schema file needed for postinstall script
 COPY apps/web/prisma/schema.prisma apps/web/prisma/schema.prisma
+# Copy postinstall script
+COPY clone-marketing.sh clone-marketing.sh
 
 # Install deps
 # Use shamefully-hoist to ensure all packages are available at root level for webpack resolution
@@ -79,10 +81,6 @@ WORKDIR /app
 # Install openssl for Prisma
 RUN apk add --no-cache openssl
 
-# Install Prisma CLI globally
-# Note: Prisma 7 requires config file for migrations
-RUN npm install -g prisma@7.2.0
-
 # Copy the standalone server output (contains node_modules subset + server.js)
 COPY --from=builder /app/apps/web/.next/standalone ./
 # Static assets used by the server
@@ -93,6 +91,11 @@ COPY --from=builder /app/apps/web/prisma ./apps/web/prisma
 # Copy runtime scripts
 COPY docker/scripts /app/docker/scripts
 RUN chmod +x /app/docker/scripts/*.sh
+
+# Install Prisma CLI globally for migrations
+RUN npm install -g prisma@7.3.0
+# Set NODE_PATH so prisma/config imports resolve correctly
+ENV NODE_PATH=/usr/local/lib/node_modules
 
 EXPOSE 3000
 

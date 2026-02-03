@@ -58,6 +58,7 @@ dist
 
 # Sanity
 .sanity
+apps/web/sanity.config.ts
 
 TODO.md
 
@@ -78,4 +79,12 @@ logs
 
 coverage
 
+# Copilot local workspace state
+copilot/.workspace
+copilot/environments/**/manifest.yml
+
 /apps/web/app/(app)/\[emailAccountId\]/demo/*
+
+# browser QA flow results
+qa/browser-flows/results/*
+!qa/browser-flows/results/README.md

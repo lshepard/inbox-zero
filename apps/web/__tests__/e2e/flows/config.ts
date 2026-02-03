@@ -43,7 +43,7 @@ export const TIMEOUTS = {
   /** Default test timeout */
   TEST_DEFAULT: 120_000,
   /** Timeout for full reply cycle tests */
-  FULL_CYCLE: 300_000,
+  FULL_CYCLE: 180_000,
 } as const;
 
 // Test email subject prefix for identification
@@ -63,8 +63,10 @@ export function shouldRunFlowTests(): boolean {
 export function validateConfig(): {
   valid: boolean;
   errors: string[];
+  warnings: string[];
 } {
   const errors: string[] = [];
+  const warnings: string[] = [];
 
   if (!E2E_GMAIL_EMAIL) {
     errors.push("E2E_GMAIL_EMAIL environment variable is required");
@@ -74,8 +76,32 @@ export function validateConfig(): {
     errors.push("E2E_OUTLOOK_EMAIL environment variable is required");
   }
 
+  // Check webhook configuration
+  const ngrokDomain = process.env.E2E_NGROK_DOMAIN;
+  const webhookUrl = process.env.WEBHOOK_URL;
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL;
+  const effectiveUrl = webhookUrl || baseUrl || "";
+
+  // If no ngrok domain and URL looks like localhost, warn
+  if (!ngrokDomain) {
+    if (!effectiveUrl) {
+      warnings.push(
+        "Neither E2E_NGROK_DOMAIN nor WEBHOOK_URL is set. Webhooks will not work.",
+      );
+    } else if (
+      effectiveUrl.includes("localhost") ||
+      effectiveUrl.includes("127.0.0.1")
+    ) {
+      warnings.push(
+        `WEBHOOK_URL appears to be localhost (${effectiveUrl}). ` +
+          "Webhooks require a publicly accessible URL. Set E2E_NGROK_DOMAIN.",
+      );
+    }
+  }
+
   return {
     valid: errors.length === 0,
     errors,
+    warnings,
   };
 }
