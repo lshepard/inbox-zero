@@ -11,6 +11,7 @@ import {
   FileTextIcon,
   FolderInputIcon,
   BellIcon,
+  CheckCircleIcon,
 } from "lucide-react";
 import { ActionType } from "@/generated/prisma/enums";
 
@@ -26,6 +27,7 @@ const ACTION_TYPE_COLORS = {
   [ActionType.CALL_WEBHOOK]: "bg-gray-500",
   [ActionType.DIGEST]: "bg-teal-500",
   [ActionType.MOVE_FOLDER]: "bg-emerald-500",
+  [ActionType.NEEDS_ACTION]: "bg-indigo-500",
   [ActionType.NOTIFY_SENDER]: "bg-amber-500",
 } as const;
 
@@ -41,6 +43,7 @@ export const ACTION_TYPE_TEXT_COLORS = {
   [ActionType.CALL_WEBHOOK]: "text-gray-500",
   [ActionType.DIGEST]: "text-teal-500",
   [ActionType.MOVE_FOLDER]: "text-emerald-500",
+  [ActionType.NEEDS_ACTION]: "text-indigo-500",
   [ActionType.NOTIFY_SENDER]: "text-amber-500",
 } as const;
 
@@ -56,6 +59,7 @@ export const ACTION_TYPE_ICONS = {
   [ActionType.CALL_WEBHOOK]: WebhookIcon,
   [ActionType.DIGEST]: FileTextIcon,
   [ActionType.MOVE_FOLDER]: FolderInputIcon,
+  [ActionType.NEEDS_ACTION]: CheckCircleIcon,
   [ActionType.NOTIFY_SENDER]: BellIcon,
 } as const;
 
